@@ -7,10 +7,14 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "contract:build": "cargo build --manifest-path poll_contract/Cargo.toml --target wasm32v1-none --release",
+    "contract:deploy": "node scripts/deploy-contract.mjs"
   },
   "dependencies": {
+    "@creit.tech/stellar-wallets-kit": "^1.9.5",
     "@stellar/stellar-sdk": "^15.0.1",
+    "buffer": "^6.0.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
   },
