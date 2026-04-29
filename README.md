@@ -1,26 +1,25 @@
 # LivePoll
 
-LivePoll is a Stellar Level 2 polling dapp with multi-wallet support, a deployed Soroban smart contract on Stellar testnet, and real-time event-driven UI updates.
+LivePoll is a Stellar Level 2 submission project: a multi-wallet polling dapp backed by a deployed Soroban smart contract on Stellar Testnet, with real-time contract event sync and visible transaction status updates in the UI.
 
-## Overview
+## Submission Overview
 
-This project covers the Level 2 requirements for:
+This project demonstrates the required Level 2 skills:
 
-- multi-wallet integration with `StellarWalletsKit`
-- wallet error handling
-- deployed Soroban contract usage from the frontend
-- contract reads and writes
-- real-time event synchronization
-- visible transaction status tracking
+- Multi-wallet integration with `StellarWalletsKit`
+- Smart contract deployment on Stellar Testnet
+- Contract reads and writes from the frontend
+- Real-time event polling and state synchronization
+- Visible transaction lifecycle feedback
+- Wallet error handling for missing wallet, rejected request, and insufficient balance
 
-## Features
+## Key Features
 
-- Connect with multiple Stellar wallets including Freighter, xBull, Albedo, Rabet, Lobstr, Hana, Hot Wallet, and Klever
-- Create polls, vote, and close polls through contract calls from the frontend
-- Read contract state in read-only mode when no wallet is connected
-- Track transaction phases: preparing, awaiting-signature, pending, success, and error
-- Sync UI state from testnet contract events
-- Handle wallet errors including wallet not found, request rejected, and insufficient balance
+- Connect with supported Stellar wallets including Freighter, xBull, Albedo, Rabet, Lobstr, Hana, Hot Wallet, and Klever
+- Create, vote on, close, and delete polls through frontend contract calls
+- Browse contract data in read-only mode even without a connected wallet
+- See transaction phases in the UI: `preparing`, `awaiting-signature`, `pending`, `success`, and `error`
+- Refresh poll state automatically from recent on-chain contract events
 
 ## Screenshot
 
@@ -41,9 +40,11 @@ Wallet options available:
 
 ## Live Demo
 
-- Optional: add your deployed Vercel, Netlify, or similar link here before submission
+- Optional: add a deployed Vercel, Netlify, or similar link here before final submission
 
-## Setup Instructions
+## Setup
+
+Run all commands from the `live-poll` project directory.
 
 1. Install dependencies:
 
@@ -85,6 +86,12 @@ VITE_STELLAR_READ_ACCOUNT=
 VITE_STELLAR_EXPLORER_URL=https://stellar.expert/explorer/testnet
 ```
 
+## Testnet Notes
+
+- A connected wallet must be funded on Stellar Testnet before it can send contract transactions
+- If a wallet has not been created on Testnet yet, fund it with Friendbot first and then retry
+- The app can still read poll data without a funded wallet by using a temporary read account
+
 ## Scripts
 
 - `npm run dev` starts the frontend
@@ -107,7 +114,7 @@ VITE_STELLAR_EXPLORER_URL=https://stellar.expert/explorer/testnet
 
 ## Submission Notes
 
-- Public GitHub repository: `https://github.com/Sagar522290/livepoll.git`
-- Meaningful commits are present in git history
-- Contract is deployed on testnet and called from the frontend
+- GitHub repository: `https://github.com/Sagar522290/livepoll.git`
+- The project includes multiple meaningful commits in git history
+- The contract is deployed on testnet and called from the frontend
 - Real-time event integration and visible transaction status are implemented
