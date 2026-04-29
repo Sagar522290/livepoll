@@ -23,6 +23,10 @@ This project demonstrates the required Level 2 skills:
 
 ## Screenshot
 
+Website preview:
+
+![LivePoll website screenshot](./public/app-screenshot.png)
+
 Wallet options available:
 
 ![Wallet options preview](./public/wallet-options-preview.svg)
