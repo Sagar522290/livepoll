@@ -211,5 +211,18 @@ impl PollContract {
         env.events()
             .publish((symbol_short!("poll"), symbol_short!("close"), poll_id), caller);
     }
+
+    pub fn delete_poll(env: Env, poll_id: u32, caller: Address) {
+        caller.require_auth();
+
+        let poll = poll_or_error(&env, poll_id);
+        if poll.creator != caller.clone() {
+            panic_with_error!(&env, PollError::NotCreator);
+        }
+
+        env.storage().persistent().remove(&DataKey::Poll(poll_id));
+        env.events()
+            .publish((symbol_short!("poll"), symbol_short!("delete"), poll_id), caller);
+    }
 }
 

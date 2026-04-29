@@ -5,7 +5,6 @@ import {
   Keypair,
   Networks,
   TransactionBuilder,
-  Address,
   rpc,
   scValToNative,
 } from '@stellar/stellar-sdk'
@@ -100,7 +99,12 @@ function toNumber(value) {
 function normalizeEventAction(action) {
   const normalized = toDisplayString(action).toLowerCase()
 
-  if (normalized === 'create' || normalized === 'vote' || normalized === 'close') {
+  if (
+    normalized === 'create' ||
+    normalized === 'vote' ||
+    normalized === 'close' ||
+    normalized === 'delete'
+  ) {
     return normalized
   }
 
@@ -129,6 +133,11 @@ function normalizeContractEvent(event) {
   if (action === 'close') {
     title = 'Poll closed'
     summary = `Poll #${pollId} was closed on-chain.`
+  }
+
+  if (action === 'delete') {
+    title = 'Poll deleted'
+    summary = `Poll #${pollId} was deleted on-chain.`
   }
 
   return {
@@ -291,7 +300,7 @@ export async function fetchVoteStatuses(polls, voterAddress, sourceAddress) {
     polls.map(async (poll) => {
       const hasVoted = await callContractRead(
         'has_voted',
-        { poll_id: poll.id, voter: Address.fromString(voterAddress) },
+        { poll_id: poll.id, voter: voterAddress },
         sourceAddress,
       )
 

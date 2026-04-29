@@ -1,5 +1,4 @@
 import {
-  startTransition,
   useDeferredValue,
   useEffect,
   useMemo,
@@ -156,6 +155,14 @@ function classifyError(error) {
     return {
       title: 'Insufficient balance',
       message: 'The connected wallet does not have enough testnet XLM to pay for the contract transaction.',
+    }
+  }
+
+  if (message.includes('account not found')) {
+    return {
+      title: 'Testnet wallet not funded',
+      message:
+        'This wallet address does not exist on Stellar testnet yet. Fund it with Friendbot before sending contract transactions.',
     }
   }
 
@@ -319,14 +326,12 @@ function App() {
     }
 
     try {
-      const readAddress = wallet?.address || (await ensureReadAccount())
+      const readAddress = await ensureReadAccount()
       const nextPolls = await fetchPolls(readAddress)
       const nextVotes = await fetchVoteStatuses(nextPolls, wallet?.address, readAddress)
 
-      startTransition(() => {
-        setPolls(nextPolls)
-        setVoteLookup(nextVotes)
-      })
+      setPolls(nextPolls)
+      setVoteLookup(nextVotes)
 
       window.setTimeout(() => {
         setLastSyncedAt(new window.Date().toISOString())
@@ -478,6 +483,7 @@ function App() {
   }
 
   async function handleCreatePoll() {
+    const walletAddress = wallet?.address
     const question = form.question.trim()
     const options = form.options.map((option) => option.trim()).filter(Boolean)
 
@@ -496,7 +502,7 @@ function App() {
     const created = await runContractWrite(
       'create_poll',
       {
-        creator: wallet.address,
+        creator: walletAddress,
         question,
         options,
         duration_minutes: form.duration,
@@ -511,10 +517,12 @@ function App() {
   }
 
   async function handleVote(pollId, optionIndex) {
+    const walletAddress = wallet?.address
+
     await runContractWrite(
       'vote',
       {
-        voter: wallet.address,
+        voter: walletAddress,
         poll_id: pollId,
         option_index: optionIndex,
       },
@@ -524,15 +532,36 @@ function App() {
   }
 
   async function handleClosePoll(pollId) {
+    const walletAddress = wallet?.address
+
     await runContractWrite(
       'close_poll',
       {
         poll_id: pollId,
-        caller: wallet.address,
+        caller: walletAddress,
       },
       'Poll closed',
       'The contract marked this poll as inactive.',
     )
+  }
+
+  async function handleDeletePoll(pollId) {
+    const walletAddress = wallet?.address
+
+    const deleted = await runContractWrite(
+      'delete_poll',
+      {
+        poll_id: pollId,
+        caller: walletAddress,
+      },
+      'Poll deleted',
+      'The contract removed this poll and the UI is syncing the latest list.',
+    )
+
+    if (deleted && selectedPollId === pollId) {
+      setSelectedPollId(null)
+      clearPollHash()
+    }
   }
 
   function addOption() {
@@ -735,7 +764,7 @@ function App() {
                 Reset
               </button>
               <button className="primary-button" onClick={handleCreatePoll} type="button">
-                Create on-chain poll
+                {wallet ? 'Create on-chain poll' : 'Connect wallet to create'}
               </button>
             </div>
           </article>
@@ -777,7 +806,7 @@ function App() {
 
               {recentEvents.length === 0 ? (
                 <p className="event-empty">
-                  Waiting for new create, vote, or close events from testnet.
+                  Waiting for new create, vote, close, or delete events from testnet.
                 </p>
               ) : (
                 <div className="event-list">
@@ -788,7 +817,13 @@ function App() {
                           <strong>{event.title}</strong>
                           <p>{event.summary}</p>
                         </div>
-                        <span className={`state-pill ${event.action === 'close' ? 'closed' : 'active'}`}>
+                        <span
+                          className={`state-pill ${
+                            event.action === 'close' || event.action === 'delete'
+                              ? 'closed'
+                              : 'active'
+                          }`}
+                        >
                           {event.action}
                         </span>
                       </div>
@@ -980,18 +1015,33 @@ function App() {
             <div className="detail-footer">
               <div>
                 <p className="detail-note">
-                  Votes and poll closures are written on-chain, then reloaded through the event
-                  sync loop.
+                  Votes, closures, and deletions are written on-chain, then reloaded through the
+                  event sync loop.
                 </p>
                 <p className="detail-note">
                   Connected wallet: {wallet ? wallet.walletName : 'No wallet connected'}
                 </p>
               </div>
 
-              {wallet?.address === selectedPoll.creator && getPollState(selectedPoll) === 'active' && (
-                <button className="secondary-button" onClick={() => handleClosePoll(selectedPoll.id)} type="button">
-                  Close poll on-chain
-                </button>
+              {wallet?.address === selectedPoll.creator && (
+                <div className="detail-actions">
+                  {getPollState(selectedPoll) === 'active' && (
+                    <button
+                      className="secondary-button"
+                      onClick={() => handleClosePoll(selectedPoll.id)}
+                      type="button"
+                    >
+                      Close poll on-chain
+                    </button>
+                  )}
+                  <button
+                    className="secondary-button danger"
+                    onClick={() => handleDeletePoll(selectedPoll.id)}
+                    type="button"
+                  >
+                    Delete poll on-chain
+                  </button>
+                </div>
               )}
             </div>
           </section>
