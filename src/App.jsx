@@ -350,6 +350,7 @@ function App() {
   const selectedPollTotalVotes = selectedPoll
     ? selectedPoll.votes.reduce((sum, vote) => sum + vote, 0)
     : 0
+  const trimmedSearch = deferredSearch.trim()
   const createPollAction = useMemo(
     () =>
       getCreatePollActionState({
@@ -1187,8 +1188,20 @@ function App() {
 
         <section className="panel poll-panel">
           <div className="panel-head controls-head">
-            <div>
+            <div className="controls-copy">
               <p className="section-label">Poll feed</p>
+              <p className="controls-subtitle">
+                Search by question or option, filter by status, then open a poll to vote or share.
+              </p>
+              <p className="controls-summary">
+                Showing <strong>{visiblePolls.length}</strong> of <strong>{polls.length}</strong> polls
+                {trimmedSearch ? (
+                  <>
+                    <span className="controls-summary-sep">•</span>
+                    Matching <strong>&ldquo;{trimmedSearch}&rdquo;</strong>
+                  </>
+                ) : null}
+              </p>
             </div>
 
             <div className="control-strip">
@@ -1226,65 +1239,71 @@ function App() {
               <p>Create the first on-chain poll to start testing real-time voting.</p>
             </div>
           ) : (
-            <div className="poll-grid">
-              {visiblePolls.map((poll) => {
-                const totalVotes = poll.votes.reduce((sum, vote) => sum + vote, 0)
-                const state = getPollState(poll)
+            <>
+              <p className="poll-feed-tip">
+                Tip: Use <strong>View details</strong> to vote and see results, or <strong>Copy link</strong> to share a poll.
+              </p>
 
-                return (
-                  <article
-                    key={poll.id}
-                    className={selectedPoll?.id === poll.id ? 'poll-card selected' : 'poll-card'}
-                  >
-                    <div className="poll-card-head">
-                      <span className={`state-pill ${state}`}>{state}</span>
-                      <span className="time-pill">{formatTimeLeft(poll.expiresAt)}</span>
-                    </div>
+              <div className="poll-grid">
+                {visiblePolls.map((poll) => {
+                  const totalVotes = poll.votes.reduce((sum, vote) => sum + vote, 0)
+                  const state = getPollState(poll)
 
-                    <h4>{poll.question}</h4>
-                    <p className="poll-meta">
-                      Poll #{poll.id} by {shortenAddress(poll.creator)}
-                    </p>
-                    <p className="poll-meta">{totalVotes} votes recorded on-chain</p>
-
-                    <div className="option-preview">
-                      {poll.options.slice(0, 3).map((option) => (
-                        <span key={option}>{option}</span>
-                      ))}
-                    </div>
-
-                    <div className="card-actions">
-                      <button className="secondary-button" onClick={() => openPollDetails(poll.id)} type="button">
-                        View details
-                      </button>
-                      <div className="detail-actions">
-                        <button
-                          className="ghost-button"
-                          onClick={() => {
-                            const shareLink = `${window.location.origin}${window.location.pathname}${window.location.search}#poll-${poll.id}`
-                            navigator.clipboard
-                              .writeText(shareLink)
-                              .then(() => {
-                                showNotice('info', 'Share link copied', `Link copied for poll #${poll.id}.`)
-                              })
-                              .catch(() => {
-                                showNotice(
-                                  'error',
-                                  'Copy failed',
-                                  'Clipboard access was blocked, so the share link could not be copied.',
-                                )
-                              })
-                          }}
-                          type="button"
-                        >
-                          Copy link
-                        </button>
+                  return (
+                    <article
+                      key={poll.id}
+                      className={selectedPoll?.id === poll.id ? 'poll-card selected' : 'poll-card'}
+                    >
+                      <div className="poll-card-head">
+                        <span className={`state-pill ${state}`}>{state}</span>
+                        <span className="time-pill">{formatTimeLeft(poll.expiresAt)}</span>
                       </div>
-                    </div>
-                  </article>
-                )
-              })}
-            </div>
+
+                      <h4>{poll.question}</h4>
+                      <p className="poll-meta">
+                        Poll #{poll.id} by {shortenAddress(poll.creator)}
+                      </p>
+                      <p className="poll-meta">{totalVotes} votes recorded on-chain</p>
+
+                      <div className="option-preview">
+                        {poll.options.slice(0, 3).map((option) => (
+                          <span key={option}>{option}</span>
+                        ))}
+                      </div>
+
+                      <div className="card-actions">
+                        <button className="secondary-button" onClick={() => openPollDetails(poll.id)} type="button">
+                          View details
+                        </button>
+                        <div className="detail-actions">
+                          <button
+                            className="ghost-button"
+                            onClick={() => {
+                              const shareLink = `${window.location.origin}${window.location.pathname}${window.location.search}#poll-${poll.id}`
+                              navigator.clipboard
+                                .writeText(shareLink)
+                                .then(() => {
+                                  showNotice('info', 'Share link copied', `Link copied for poll #${poll.id}.`)
+                                })
+                                .catch(() => {
+                                  showNotice(
+                                    'error',
+                                    'Copy failed',
+                                    'Clipboard access was blocked, so the share link could not be copied.',
+                                  )
+                                })
+                            }}
+                            type="button"
+                          >
+                            Copy link
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            </>
           )}
         </section>
 
