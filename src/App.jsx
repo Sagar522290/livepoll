@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import * as Sentry from '@sentry/react'
 import './App.css'
 import {
   connectWallet,
@@ -13,15 +14,20 @@ import {
   ensureReadAccount,
   fetchContractEvents,
   fetchPolls,
+  fetchRewardConfig,
+  fetchRewardTokenBalanceForContract,
+  fetchRewardTokenMetadataForContract,
   fetchVoteStatuses,
   getExplorerLink,
   NETWORK_PASSPHRASE,
   RPC_URL,
+  REWARD_TOKEN_CONTRACT_ID,
   submitContractTransaction,
   SUPPORTED_WALLET_NAMES,
 } from './lib/stellar'
 import { readCachedPolls, removeCachedPoll, writeCachedPolls } from './lib/pollCache'
 import { getPollState, mergeRecentEvents, parsePollHash } from './lib/pollLogic'
+import { startContractEventStream } from './lib/contractEventStream'
 
 const EMPTY_FORM = {
   question: '',
@@ -30,6 +36,7 @@ const EMPTY_FORM = {
 }
 
 const DURATION_PRESETS = [5, 15, 30, 60, 180, 1440]
+const EVENT_CURSOR_STORAGE_KEY = 'livepoll_event_cursor'
 
 function shortenAddress(address) {
   if (!address) {
@@ -156,6 +163,11 @@ function normalizeAddress(address) {
   return String(address || '').trim().toUpperCase()
 }
 
+function normalizeContractId(value) {
+  const normalized = String(value || '').trim()
+  return normalized ? normalized : null
+}
+
 function isPollOwner(poll, walletAddress) {
   return normalizeAddress(walletAddress) !== '' && normalizeAddress(walletAddress) === normalizeAddress(poll?.creator)
 }
@@ -264,6 +276,9 @@ function App() {
   const [wallet, setWallet] = useState(null)
   const [polls, setPolls] = useState(() => readCachedPolls())
   const [voteLookup, setVoteLookup] = useState({})
+  const [rewardConfig, setRewardConfig] = useState({ enabled: false, amount: 0, token: null })
+  const [rewardTokenMeta, setRewardTokenMeta] = useState(null)
+  const [rewardTokenBalance, setRewardTokenBalance] = useState(null)
   const [selectedPollId, setSelectedPollId] = useState(null)
   const [filter, setFilter] = useState('all')
   const [sortBy, setSortBy] = useState('ending-soon')
@@ -280,9 +295,52 @@ function App() {
   const [recentEvents, setRecentEvents] = useState([])
 
   const eventCursorRef = useRef(null)
+  const eventStreamRef = useRef(null)
   const refreshPollStateRef = useRef(null)
-  const syncFromEventsRef = useRef(null)
   const deferredSearch = useDeferredValue(searchQuery)
+  const effectiveRewardTokenContractId = useMemo(() => {
+    if (!rewardConfig.enabled) {
+      return null
+    }
+
+    return normalizeContractId(rewardConfig.token || REWARD_TOKEN_CONTRACT_ID)
+  }, [rewardConfig.enabled, rewardConfig.token])
+
+  const effectiveRewardTokenMeta = useMemo(() => {
+    if (!effectiveRewardTokenContractId) {
+      return null
+    }
+
+    if (!rewardTokenMeta || rewardTokenMeta.contractId !== effectiveRewardTokenContractId) {
+      return null
+    }
+
+    return rewardTokenMeta.meta || null
+  }, [effectiveRewardTokenContractId, rewardTokenMeta])
+
+  const effectiveRewardTokenBalance = useMemo(() => {
+    if (!effectiveRewardTokenContractId || !wallet?.address) {
+      return null
+    }
+
+    if (
+      !rewardTokenBalance ||
+      rewardTokenBalance.contractId !== effectiveRewardTokenContractId ||
+      normalizeAddress(rewardTokenBalance.walletAddress) !== normalizeAddress(wallet.address)
+    ) {
+      return null
+    }
+
+    return rewardTokenBalance.balance ?? null
+  }, [effectiveRewardTokenContractId, rewardTokenBalance, wallet])
+
+  useEffect(() => {
+    try {
+      eventCursorRef.current = window.localStorage.getItem(EVENT_CURSOR_STORAGE_KEY)
+    } catch {
+      eventCursorRef.current = null
+    }
+  }, [])
 
   const selectedPoll = useMemo(
     () => polls.find((poll) => poll.id === selectedPollId) || null,
@@ -376,7 +434,33 @@ function App() {
     setNotice({ type, title, message })
   }
 
+  function toNumber(value) {
+    if (typeof value === 'number') {
+      return value
+    }
+
+    if (typeof value === 'bigint') {
+      return Number(value)
+    }
+
+    return Number(value || 0)
+  }
+
   function handleFailure(error, txPhase = 'error') {
+    try {
+      Sentry.withScope((scope) => {
+        scope.setTag('tx_phase', txPhase)
+        scope.setTag('wallet_connected', wallet?.address ? 'true' : 'false')
+        scope.setContext('contract', { contractId: CONTRACT_ID })
+        if (wallet?.address) {
+          scope.setContext('wallet', { address: wallet.address, walletName: wallet.walletName })
+        }
+        scope.captureException(error)
+      })
+    } catch {
+      // Best effort only.
+    }
+
     const parsed = classifyError(error)
     setTransaction((current) => ({
       ...current,
@@ -407,8 +491,26 @@ function App() {
       const nextPolls = await fetchPolls(readAddress)
       const nextVotes = await fetchVoteStatuses(nextPolls, wallet?.address, readAddress)
 
+      let nextRewardConfig = null
+      try {
+        nextRewardConfig = await fetchRewardConfig(readAddress)
+      } catch {
+        nextRewardConfig = null
+      }
+
       setPolls(nextPolls)
       setVoteLookup(nextVotes)
+
+      if (Array.isArray(nextRewardConfig) && nextRewardConfig.length >= 3) {
+        const [enabled, amount, token] = nextRewardConfig
+        setRewardConfig({
+          enabled: Boolean(enabled),
+          amount: toNumber(amount),
+          token: normalizeContractId(token),
+        })
+      } else {
+        setRewardConfig({ enabled: false, amount: 0, token: null })
+      }
 
       window.setTimeout(() => {
         setLastSyncedAt(new window.Date().toISOString())
@@ -433,27 +535,51 @@ function App() {
     }
   }
 
-  async function syncFromEvents() {
-    if (!CONTRACT_ID) {
-      return
-    }
+  useEffect(() => {
+    let cancelled = false
 
-    try {
-      const eventBatch = await fetchContractEvents(eventCursorRef.current)
-      eventCursorRef.current = eventBatch.cursor
-
-      if (eventBatch.events.length > 0) {
-        setRecentEvents((current) => mergeRecentEvents(current, eventBatch.events))
-        await refreshPollState({ silent: true })
+    async function refreshRewards() {
+      if (!rewardConfig.enabled || !wallet?.address || !effectiveRewardTokenContractId) {
+        return
       }
-    } catch {
-      // Background event polling should not interrupt the main UX.
+
+      try {
+        const readAddress = await ensureReadAccount()
+
+        const [meta, balance] = await Promise.all([
+          effectiveRewardTokenMeta
+            ? Promise.resolve(effectiveRewardTokenMeta)
+            : fetchRewardTokenMetadataForContract(effectiveRewardTokenContractId, readAddress),
+          fetchRewardTokenBalanceForContract(effectiveRewardTokenContractId, wallet.address, readAddress),
+        ])
+
+        if (cancelled) {
+          return
+        }
+
+        if (!effectiveRewardTokenMeta && meta) {
+          setRewardTokenMeta({ contractId: effectiveRewardTokenContractId, meta })
+        }
+
+        setRewardTokenBalance({
+          contractId: effectiveRewardTokenContractId,
+          walletAddress: wallet.address,
+          balance: balance == null ? null : toNumber(balance),
+        })
+      } catch {
+        // Ignore read failures; keep showing the last derived values if any.
+      }
     }
-  }
+
+    refreshRewards()
+
+    return () => {
+      cancelled = true
+    }
+  }, [effectiveRewardTokenContractId, effectiveRewardTokenMeta, rewardConfig.enabled, wallet?.address])
 
   useEffect(() => {
     refreshPollStateRef.current = refreshPollState
-    syncFromEventsRef.current = syncFromEvents
   })
 
   useEffect(() => {
@@ -469,12 +595,43 @@ function App() {
       return undefined
     }
 
-    const interval = window.setInterval(() => {
-      syncFromEventsRef.current?.()
-    }, 5000)
+    const contractIds = [CONTRACT_ID, effectiveRewardTokenContractId].filter(Boolean)
+    const stream = startContractEventStream({
+      fetchEvents: (cursor) => fetchContractEvents(cursor, contractIds),
+      getCursor: () => eventCursorRef.current,
+      setCursor: (cursor) => {
+        eventCursorRef.current = cursor
+        try {
+          if (cursor) {
+            window.localStorage.setItem(EVENT_CURSOR_STORAGE_KEY, cursor)
+          } else {
+            window.localStorage.removeItem(EVENT_CURSOR_STORAGE_KEY)
+          }
+        } catch {
+          // ignore storage failures
+        }
+      },
+      onEvents: async (events) => {
+        setRecentEvents((current) => mergeRecentEvents(current, events))
+        await refreshPollStateRef.current?.({ silent: true })
+      },
+      onError: () => {
+        // Background streaming should not interrupt the main UX.
+      },
+      minIntervalMs: 1500,
+      maxIntervalMs: 20000,
+      hiddenIntervalMs: 45000,
+    })
 
-    return () => window.clearInterval(interval)
-  }, [selectedPollId, wallet?.address])
+    eventStreamRef.current = stream
+
+    return () => {
+      stream.stop()
+      if (eventStreamRef.current === stream) {
+        eventStreamRef.current = null
+      }
+    }
+  }, [effectiveRewardTokenContractId])
 
   useEffect(() => {
     const syncSelectedPollFromHash = () => {
@@ -538,6 +695,19 @@ function App() {
   }
 
   function updateTransactionStatus(update) {
+    try {
+      if (update?.phase) {
+        Sentry.addBreadcrumb({
+          category: 'contract_tx',
+          message: update.phase,
+          data: update,
+          level: 'info',
+        })
+      }
+    } catch {
+      // Best effort only.
+    }
+
     setTransaction((current) => ({ ...current, ...update }))
   }
 
@@ -564,6 +734,7 @@ function App() {
       })
 
       showNotice('success', successTitle, successMessage)
+      eventStreamRef.current?.poke()
       await refreshPollState({ silent: true })
       return true
     } catch (error) {
@@ -814,6 +985,32 @@ function App() {
               <div>
                 <dt>Contract</dt>
                 <dd>{CONTRACT_ID || 'Add VITE_STELLAR_CONTRACT_ID'}</dd>
+              </div>
+              <div>
+                <dt>Reward token</dt>
+                <dd>
+                  {rewardConfig.enabled
+                    ? effectiveRewardTokenContractId || rewardConfig.token || REWARD_TOKEN_CONTRACT_ID || 'Configured on-chain'
+                    : 'Not configured'}
+                </dd>
+              </div>
+              <div>
+                <dt>Reward</dt>
+                <dd>
+                  {rewardConfig.enabled
+                    ? `${rewardConfig.amount} ${effectiveRewardTokenMeta?.symbol || 'tokens'} per vote`
+                    : 'Disabled'}
+                </dd>
+              </div>
+              <div>
+                <dt>Your balance</dt>
+                <dd>
+                  {wallet?.address && rewardConfig.enabled
+                    ? effectiveRewardTokenBalance == null
+                      ? 'Loading...'
+                      : `${effectiveRewardTokenBalance} ${effectiveRewardTokenMeta?.symbol || 'tokens'}`
+                    : 'Connect wallet'}
+                </dd>
               </div>
               <div>
                 <dt>Last sync</dt>

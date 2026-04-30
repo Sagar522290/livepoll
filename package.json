@@ -14,11 +14,15 @@
     "preview": "vite preview",
     "test": "node tests/run.mjs",
     "contract:build": "cargo build --manifest-path poll_contract/Cargo.toml --target wasm32v1-none --release",
+    "token:build": "cargo build --manifest-path token_contract/Cargo.toml --target wasm32v1-none --release",
+    "contracts:build": "npm run contract:build && npm run token:build",
     "wasm:sync": "node scripts/sync-wasm.mjs",
-    "contract:deploy": "node scripts/deploy-contract.mjs"
+    "contract:deploy": "node scripts/deploy-contract.mjs",
+    "contracts:deploy": "node scripts/deploy-contract.mjs"
   },
   "dependencies": {
     "@creit.tech/stellar-wallets-kit": "^1.9.5",
+    "@sentry/react": "^8.0.0",
     "@stellar/stellar-sdk": "^15.0.1",
     "buffer": "^6.0.3",
     "react": "^18.3.1",

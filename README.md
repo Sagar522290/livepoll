@@ -1,14 +1,21 @@
 # LivePoll
 
+[![CI](https://github.com/Sagar522290/livepoll/actions/workflows/ci.yml/badge.svg)](https://github.com/Sagar522290/livepoll/actions/workflows/ci.yml)
+
 LivePoll is a mini end-to-end Stellar + Soroban dApp: a multi-wallet polling app backed by a deployed Soroban smart contract on Stellar Testnet, with real-time contract event sync, transaction progress feedback, basic caching, and a small automated test suite.
 
-## Level 3 Submission Checklist (fill before submitting)
+## Level 4 Submission Checklist (fill before submitting)
 
 - Live demo link: `https://livepoll-njy1ayhqq-sagar522290s-projects.vercel.app/`
 - Demo video (1 minute) link: TODO
+- Mobile responsive screenshot: TODO (add a screenshot taken at a small viewport width)
+- CI/CD running (badge or screenshot): ✅ (see CI badge at the top)
 - Test output screenshot (3+ passing tests): ✅ (see below)
 - Public GitHub repo link: `https://github.com/Sagar522290/livepoll.git`
-- 3+ meaningful commits for Level 3: ✅
+- Minimum 8+ meaningful commits: TODO
+- Poll contract address: TODO
+- Reward token address: TODO
+- Inter-contract call tx hash (vote + reward): TODO
 
 ## Test Output (Screenshot)
 
@@ -34,6 +41,8 @@ This project demonstrates:
 - Create, vote on, close, and delete polls through frontend contract calls
 - Browse contract data in read-only mode even without a connected wallet
 - See transaction phases in the UI: `preparing`, `awaiting-signature`, `pending`, `success`, and `error`
+- Real-time-ish event streaming loop with cursor persistence + adaptive backoff
+- Fewer RPC round-trips via batch `has_voted_many` contract reads
 - Refresh poll state automatically from recent on-chain contract events
 
 ## Screenshot
@@ -46,20 +55,17 @@ Wallet options available:
 
 ![Wallet options preview](./public/wallet-options-preview.svg)
 
-## Deployed Contract
+## Deployed Contracts (Testnet)
 
 - Network: `Stellar Testnet`
-- Contract address: `CBGJGJOFFSY5KK7DHFENNBGASXROVG5GEW2MISGJ2N2F7VLHCCUJ42UA`
-- Contract explorer: https://stellar.expert/explorer/testnet/contract/CBGJGJOFFSY5KK7DHFENNBGASXROVG5GEW2MISGJ2N2F7VLHCCUJ42UA
-
-## Verifiable Contract Call
-
-- Transaction hash: `282d8793c1968e02b32d6d23d688b930a01c316056c908acfd6b685b8089f67e`
-- Stellar Expert link: https://stellar.expert/explorer/testnet/tx/282d8793c1968e02b32d6d23d688b930a01c316056c908acfd6b685b8089f67e
+- Poll contract address: TODO
+- Reward token address: TODO
+- Reward configuration tx hash: TODO
+- Inter-contract call tx hash (vote + reward mint): TODO
 
 ## Live Demo
 
-- TODO: add a deployed Vercel, Netlify, or similar link here before final submission
+- `https://livepoll-njy1ayhqq-sagar522290s-projects.vercel.app/`
 
 ## Setup
 
@@ -71,13 +77,13 @@ Run all commands from the `live-poll` project directory.
 npm install
 ```
 
-2. Build the Soroban contract:
+2. Build the Soroban contracts:
 
 ```bash
-npm run contract:build
+npm run contracts:build
 ```
 
-3. Sync the compiled contract WASM into the frontend (used to load the contract spec/ABI at runtime):
+3. Sync the compiled contract WASMs into the frontend (used to load the contract specs/ABIs at runtime):
 
 ```bash
 npm run wasm:sync
@@ -101,6 +107,10 @@ npm run dev
 npm run build
 ```
 
+## CD (GitHub Pages)
+
+The repo includes a GitHub Pages deploy workflow at `.github/workflows/deploy-pages.yml` that builds with `BASE_PATH=/<repo>/` and publishes the `dist/` output.
+
 ## Tests
 
 Run the automated tests:
@@ -117,9 +127,12 @@ For submission, include a screenshot of the terminal output showing **3+ tests p
 VITE_STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 VITE_STELLAR_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
 VITE_STELLAR_CONTRACT_ID=CBGJGJOFFSY5KK7DHFENNBGASXROVG5GEW2MISGJ2N2F7VLHCCUJ42UA
+VITE_REWARD_TOKEN_CONTRACT_ID=
 VITE_STELLAR_READ_ACCOUNT=
 VITE_STELLAR_EXPLORER_URL=https://stellar.expert/explorer/testnet
 VITE_POLL_CONTRACT_WASM_URL=/contracts/poll_contract.wasm
+VITE_REWARD_TOKEN_WASM_URL=/contracts/reward_token_contract.wasm
+VITE_SENTRY_DSN=
 ```
 
 ## Testnet Notes
@@ -134,9 +147,12 @@ VITE_POLL_CONTRACT_WASM_URL=/contracts/poll_contract.wasm
 - `npm run build` creates a production build
 - `npm run lint` runs ESLint
 - `npm test` runs the Node.js test suite
-- `npm run contract:build` builds the Soroban contract
+- `npm run contract:build` builds the poll contract
+- `npm run token:build` builds the reward token contract
+- `npm run contracts:build` builds both contracts
 - `npm run wasm:sync` copies the compiled WASM into `public/contracts/` for the frontend to load the contract spec
-- `npm run contract:deploy` uploads and deploys the contract to testnet
+- `npm run contract:deploy` uploads/deploys both contracts + configures rewards on testnet
+- `npm run contracts:deploy` same as `contract:deploy`
 
 ## Deploy (Vercel / Netlify)
 

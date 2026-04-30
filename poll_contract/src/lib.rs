@@ -1,9 +1,15 @@
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, panic_with_error, symbol_short, Address,
-    Env, String, Vec,
+    auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
+    contract, contractclient, contracterror, contractimpl, contracttype, panic_with_error,
+    symbol_short, vec, Address, Env, IntoVal, String, Vec,
 };
+
+#[contractclient(name = "RewardTokenClient")]
+pub trait RewardTokenContract {
+    fn mint(env: Env, to: Address, amount: i128);
+}
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -23,6 +29,9 @@ pub enum DataKey {
     Poll(u32),
     PollCount,
     UserVote(u32, Address),
+    Admin,
+    RewardToken,
+    RewardAmount,
 }
 
 #[contracterror]
@@ -39,6 +48,8 @@ pub enum PollError {
     InvalidOptionIndex = 8,
     AlreadyVoted = 9,
     NotCreator = 10,
+    Unauthorized = 11,
+    InvalidRewardAmount = 12,
 }
 
 #[contract]
@@ -71,8 +82,62 @@ fn validate_poll_input(env: &Env, question: &String, options: &Vec<String>, dura
     }
 }
 
+fn read_admin(env: &Env) -> Option<Address> {
+    env.storage().persistent().get(&DataKey::Admin)
+}
+
+fn require_admin(env: &Env, caller: &Address) {
+    match read_admin(env) {
+        Some(admin) => {
+            if admin != caller.clone() {
+                panic_with_error!(env, PollError::Unauthorized);
+            }
+        }
+        None => {
+            env.storage().persistent().set(&DataKey::Admin, caller);
+        }
+    }
+}
+
 #[contractimpl]
 impl PollContract {
+    /// Configure vote rewards by setting a token contract and mint amount.
+    ///
+    /// - First call sets the `Admin` to the provided `caller`.
+    /// - Subsequent calls require the stored `Admin` to authorize the update.
+    pub fn configure_rewards(env: Env, caller: Address, token: Address, amount: i128) {
+        caller.require_auth();
+        require_admin(&env, &caller);
+
+        if amount < 0 {
+            panic_with_error!(&env, PollError::InvalidRewardAmount);
+        }
+
+        if amount == 0 {
+            env.storage().persistent().remove(&DataKey::RewardToken);
+            env.storage().persistent().remove(&DataKey::RewardAmount);
+            env.events()
+                .publish((symbol_short!("poll"), symbol_short!("rewards"), symbol_short!("off")), caller);
+            return;
+        }
+
+        env.storage().persistent().set(&DataKey::RewardToken, &token);
+        env.storage().persistent().set(&DataKey::RewardAmount, &amount);
+        env.events().publish(
+            (symbol_short!("poll"), symbol_short!("rewards"), symbol_short!("on")),
+            (token, amount, caller),
+        );
+    }
+
+    pub fn get_reward_config(env: Env) -> (bool, i128, Address) {
+        let amount: i128 = env.storage().persistent().get(&DataKey::RewardAmount).unwrap_or(0i128);
+        let token: Option<Address> = env.storage().persistent().get(&DataKey::RewardToken);
+        match token {
+            Some(token) if amount > 0 => (true, amount, token),
+            _ => (false, 0i128, env.current_contract_address()),
+        }
+    }
+
     pub fn create_poll(
         env: Env,
         creator: Address,
@@ -140,9 +205,31 @@ impl PollContract {
         env.storage().persistent().set(&DataKey::Poll(poll_id), &poll);
         env.storage().persistent().set(&user_vote_key, &true);
         env.events().publish(
-            (symbol_short!("poll"), symbol_short!("vote"), poll_id),
+            (symbol_short!("poll"), symbol_short!("vote"), poll_id, voter.clone()),
             option_index,
         );
+
+        let amount: i128 = env.storage().persistent().get(&DataKey::RewardAmount).unwrap_or(0i128);
+        if amount > 0 {
+            if let Some(token) = env.storage().persistent().get::<_, Address>(&DataKey::RewardToken) {
+                env.authorize_as_current_contract(vec![
+                    &env,
+                    InvokerContractAuthEntry::Contract(SubContractInvocation {
+                        context: ContractContext {
+                            contract: token.clone(),
+                            fn_name: symbol_short!("mint"),
+                            args: vec![&env, voter.clone().into_val(&env), amount.into_val(&env)],
+                        },
+                        sub_invocations: vec![&env],
+                    }),
+                ]);
+                RewardTokenClient::new(&env, &token).mint(&voter, &amount);
+                env.events().publish(
+                    (symbol_short!("poll"), symbol_short!("reward"), poll_id),
+                    (token, voter, amount),
+                );
+            }
+        }
     }
 
     pub fn get_poll(env: Env, poll_id: u32) -> Poll {
@@ -198,6 +285,16 @@ impl PollContract {
         env.storage().persistent().has(&DataKey::UserVote(poll_id, voter))
     }
 
+    pub fn has_voted_many(env: Env, poll_ids: Vec<u32>, voter: Address) -> Vec<bool> {
+        let mut results = Vec::new(&env);
+
+        for poll_id in poll_ids.iter() {
+            results.push_back(env.storage().persistent().has(&DataKey::UserVote(poll_id, voter.clone())));
+        }
+
+        results
+    }
+
     pub fn close_poll(env: Env, poll_id: u32, caller: Address) {
         caller.require_auth();
 
@@ -223,6 +320,126 @@ impl PollContract {
         env.storage().persistent().remove(&DataKey::Poll(poll_id));
         env.events()
             .publish((symbol_short!("poll"), symbol_short!("delete"), poll_id), caller);
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use soroban_sdk::testutils::Address as _;
+
+    #[contract]
+    struct MockTokenContract;
+
+    #[contracttype]
+    enum MockTokenKey {
+        Balance(Address),
+    }
+
+    fn read_mock_balance(env: &Env, id: &Address) -> i128 {
+        env.storage()
+            .persistent()
+            .get(&MockTokenKey::Balance(id.clone()))
+            .unwrap_or(0i128)
+    }
+
+    fn write_mock_balance(env: &Env, id: &Address, amount: i128) {
+        env.storage()
+            .persistent()
+            .set(&MockTokenKey::Balance(id.clone()), &amount);
+    }
+
+    #[contractimpl]
+    impl MockTokenContract {
+        pub fn mint(env: Env, to: Address, amount: i128) {
+            let balance = read_mock_balance(&env, &to);
+            write_mock_balance(&env, &to, balance + amount);
+        }
+
+        pub fn balance(env: Env, id: Address) -> i128 {
+            read_mock_balance(&env, &id)
+        }
+    }
+
+    #[test]
+    fn vote_mints_reward_tokens_when_configured() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let poll_contract_id = env.register(PollContract, ());
+        let poll_client = PollContractClient::new(&env, &poll_contract_id);
+
+        let token_contract_id = env.register(MockTokenContract, ());
+        let token_client = MockTokenContractClient::new(&env, &token_contract_id);
+
+        let admin = Address::generate(&env);
+        poll_client.configure_rewards(&admin, &token_contract_id, &10i128);
+
+        let creator = Address::generate(&env);
+        let voter = Address::generate(&env);
+
+        let poll_id = poll_client.create_poll(
+            &creator,
+            &String::from_str(&env, "Pick a roadmap item"),
+            &Vec::from_array(
+                &env,
+                [
+                    String::from_str(&env, "Mobile"),
+                    String::from_str(&env, "Analytics"),
+                ],
+            ),
+            &15u64,
+        );
+
+        poll_client.vote(&voter, &poll_id, &0u32);
+        assert_eq!(token_client.balance(&voter), 10i128);
+    }
+
+    #[test]
+    fn has_voted_many_returns_vote_flags() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let poll_contract_id = env.register(PollContract, ());
+        let poll_client = PollContractClient::new(&env, &poll_contract_id);
+
+        let creator = Address::generate(&env);
+        let voter = Address::generate(&env);
+
+        let poll_1 = poll_client.create_poll(
+            &creator,
+            &String::from_str(&env, "Pick a roadmap item"),
+            &Vec::from_array(
+                &env,
+                [
+                    String::from_str(&env, "Mobile"),
+                    String::from_str(&env, "Analytics"),
+                ],
+            ),
+            &15u64,
+        );
+
+        let poll_2 = poll_client.create_poll(
+            &creator,
+            &String::from_str(&env, "Pick a color"),
+            &Vec::from_array(
+                &env,
+                [
+                    String::from_str(&env, "Green"),
+                    String::from_str(&env, "Orange"),
+                ],
+            ),
+            &15u64,
+        );
+
+        poll_client.vote(&voter, &poll_1, &0u32);
+
+        let ids = Vec::from_array(&env, [poll_1, poll_2]);
+        let flags = poll_client.has_voted_many(&ids, &voter);
+
+        assert_eq!(flags.len(), 2);
+        assert_eq!(flags.get(0).unwrap(), true);
+        assert_eq!(flags.get(1).unwrap(), false);
     }
 }
 

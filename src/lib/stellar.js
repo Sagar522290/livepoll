@@ -9,20 +9,14 @@ import {
   scValToNative,
 } from '@stellar/stellar-sdk'
 import { Spec } from '@stellar/stellar-sdk/contract'
-import {
-  StellarWalletsKit,
-  WalletNetwork,
-  allowAllModules,
-  FREIGHTER_ID,
-} from '@creit.tech/stellar-wallets-kit'
-import {
-  getAddress as getFreighterAddress,
-  requestAccess as requestFreighterAccess,
-} from '@stellar/freighter-api'
 
 const pollContractWasmUrl =
   import.meta.env.VITE_POLL_CONTRACT_WASM_URL ||
   `${import.meta.env.BASE_URL}contracts/poll_contract.wasm`
+
+const rewardTokenWasmUrl =
+  import.meta.env.VITE_REWARD_TOKEN_WASM_URL ||
+  `${import.meta.env.BASE_URL}contracts/reward_token_contract.wasm`
 
 if (!globalThis.Buffer) {
   globalThis.Buffer = Buffer
@@ -36,6 +30,7 @@ export const RPC_URL = import.meta.env.VITE_STELLAR_RPC_URL || DEFAULT_RPC_URL
 export const NETWORK_PASSPHRASE =
   import.meta.env.VITE_STELLAR_NETWORK_PASSPHRASE || Networks.TESTNET
 export const CONTRACT_ID = import.meta.env.VITE_STELLAR_CONTRACT_ID || DEFAULT_CONTRACT_ID
+export const REWARD_TOKEN_CONTRACT_ID = import.meta.env.VITE_REWARD_TOKEN_CONTRACT_ID || ''
 export const EXPLORER_BASE_URL =
   import.meta.env.VITE_STELLAR_EXPLORER_URL || 'https://stellar.expert/explorer/testnet'
 
@@ -52,12 +47,26 @@ export const SUPPORTED_WALLET_NAMES = [
 
 export const server = new rpc.Server(RPC_URL)
 
-export const walletKit = new StellarWalletsKit({
-  network: WalletNetwork.TESTNET,
-  modules: allowAllModules(),
-})
+const specCache = new Map()
+let walletRuntimePromise = null
 
-let specPromise
+async function getWalletRuntime() {
+  if (walletRuntimePromise) {
+    return walletRuntimePromise
+  }
+
+  walletRuntimePromise = import('@creit.tech/stellar-wallets-kit').then(
+    ({ StellarWalletsKit, WalletNetwork, allowAllModules, FREIGHTER_ID }) => ({
+      walletKit: new StellarWalletsKit({
+        network: WalletNetwork.TESTNET,
+        modules: allowAllModules(),
+      }),
+      FREIGHTER_ID,
+    }),
+  )
+
+  return walletRuntimePromise
+}
 
 function ensureContractConfigured() {
   if (!CONTRACT_ID) {
@@ -99,54 +108,57 @@ function toNumber(value) {
   return Number(value || 0)
 }
 
-function normalizeEventAction(action) {
-  const normalized = toDisplayString(action).toLowerCase()
-
-  if (
-    normalized === 'create' ||
-    normalized === 'vote' ||
-    normalized === 'close' ||
-    normalized === 'delete'
-  ) {
-    return normalized
-  }
-
-  return 'update'
-}
-
 function normalizeContractEvent(event) {
   const topic = (event.topic || []).map((item) => scValToNative(item))
   const value = event.value ? scValToNative(event.value) : null
-  const action = normalizeEventAction(topic[1])
-  const pollId = toNumber(topic[2])
+  const namespace = toDisplayString(topic[0]).toLowerCase()
+  const action = toDisplayString(topic[1]).toLowerCase()
+  const pollId = namespace === 'poll' ? toNumber(topic[2]) : null
+  const actor = topic.length >= 4 ? toDisplayString(topic[3]) : ''
 
   let title = 'Contract update detected'
-  let summary = `Poll #${pollId} changed on-chain.`
+  let summary = 'A contract update was detected on-chain.'
 
-  if (action === 'create') {
+  if (namespace === 'poll' && action === 'create') {
     title = 'Poll created'
     summary = `Poll #${pollId} was created on-chain.`
   }
 
-  if (action === 'vote') {
+  if (namespace === 'poll' && action === 'vote') {
     title = 'Vote received'
-    summary = `Poll #${pollId} recorded a vote for option ${toNumber(value) + 1}.`
+    summary = `Poll #${pollId} recorded a vote for option ${toNumber(value) + 1}${actor ? ` by ${actor}` : ''}.`
   }
 
-  if (action === 'close') {
+  if (namespace === 'poll' && action === 'close') {
     title = 'Poll closed'
     summary = `Poll #${pollId} was closed on-chain.`
   }
 
-  if (action === 'delete') {
+  if (namespace === 'poll' && action === 'delete') {
     title = 'Poll deleted'
     summary = `Poll #${pollId} was deleted on-chain.`
+  }
+
+  if (namespace === 'poll' && action === 'reward') {
+    title = 'Vote reward minted'
+    summary = 'A reward was minted after a vote.'
+  }
+
+  if (namespace === 'token' && action === 'mint') {
+    title = 'Reward minted'
+    summary = `Minted ${toDisplayString(value)} tokens to ${toDisplayString(topic[2])}.`
+  }
+
+  if (namespace === 'token' && action === 'transfer') {
+    title = 'Reward token transfer'
+    summary = `Transferred ${toDisplayString(value)} tokens.`
   }
 
   return {
     id: event.id,
     action,
-    pollId,
+    namespace,
+    pollId: pollId == null ? undefined : pollId,
     title,
     summary,
     ledger: event.ledger,
@@ -159,20 +171,34 @@ export function getExplorerLink(type, value) {
   return `${EXPLORER_BASE_URL}/${type}/${value}`
 }
 
-export async function getContractSpec() {
-  if (!specPromise) {
-    specPromise = fetch(pollContractWasmUrl)
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error('Unable to load the compiled poll contract wasm.')
-        }
-
-        return response.arrayBuffer()
-      })
-      .then((buffer) => Spec.fromWasm(Buffer.from(buffer)))
+async function getSpec(wasmUrl, errorMessage) {
+  if (specCache.has(wasmUrl)) {
+    return specCache.get(wasmUrl)
   }
 
-  return specPromise
+  const promise = fetch(wasmUrl)
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(errorMessage)
+      }
+
+      return response.arrayBuffer()
+    })
+    .then((buffer) => Spec.fromWasm(Buffer.from(buffer)))
+
+  specCache.set(wasmUrl, promise)
+  return promise
+}
+
+export async function getContractSpec() {
+  return getSpec(pollContractWasmUrl, 'Unable to load the compiled poll contract wasm.')
+}
+
+export async function getRewardTokenSpec() {
+  return getSpec(
+    rewardTokenWasmUrl,
+    'Unable to load the compiled reward token contract wasm.',
+  )
 }
 
 export async function ensureReadAccount() {
@@ -197,11 +223,9 @@ export async function ensureReadAccount() {
   return keypair.publicKey()
 }
 
-async function buildInvocation({ sourceAddress, method, args = {} }) {
-  ensureContractConfigured()
-  const spec = await getContractSpec()
+async function buildInvocation({ sourceAddress, contractId, spec, method, args = {} }) {
   const account = await server.getAccount(sourceAddress)
-  const contract = new Contract(CONTRACT_ID)
+  const contract = new Contract(contractId)
   const scArgs = spec.funcArgsToScVals(method, args)
 
   const tx = new TransactionBuilder(account, {
@@ -260,8 +284,46 @@ function extractPolledFailure(reply) {
 }
 
 export async function callContractRead(method, args = {}, sourceAddress) {
+  ensureContractConfigured()
   const readAddress = sourceAddress || (await ensureReadAccount())
-  const { spec, tx } = await buildInvocation({ sourceAddress: readAddress, method, args })
+  const spec = await getContractSpec()
+  const { tx } = await buildInvocation({
+    sourceAddress: readAddress,
+    contractId: CONTRACT_ID,
+    spec,
+    method,
+    args,
+  })
+  const simulation = await server.simulateTransaction(tx)
+
+  if (rpc.Api.isSimulationError(simulation)) {
+    throw new Error(extractSimulationError(simulation))
+  }
+
+  const result = simulation.result?.retval
+  if (!result) {
+    return null
+  }
+
+  return spec.funcResToNative(method, result)
+}
+
+export async function callRewardTokenRead(method, args = {}, sourceAddress, tokenContractId) {
+  const resolvedContractId = toDisplayString(tokenContractId || REWARD_TOKEN_CONTRACT_ID)
+  if (!resolvedContractId) {
+    throw new Error('Missing reward token contract id.')
+  }
+
+  const readAddress = sourceAddress || (await ensureReadAccount())
+  const spec = await getRewardTokenSpec()
+  const { tx } = await buildInvocation({
+    sourceAddress: readAddress,
+    contractId: resolvedContractId,
+    spec,
+    method,
+    args,
+  })
+
   const simulation = await server.simulateTransaction(tx)
 
   if (rpc.Api.isSimulationError(simulation)) {
@@ -294,9 +356,65 @@ export async function fetchPolls(sourceAddress) {
   return (rawPolls || []).map(normalizePoll)
 }
 
+export async function fetchRewardConfig(sourceAddress) {
+  return callContractRead('get_reward_config', {}, sourceAddress)
+}
+
+export async function fetchRewardTokenMetadata(sourceAddress) {
+  const resolvedContractId = toDisplayString(REWARD_TOKEN_CONTRACT_ID)
+  if (!resolvedContractId) {
+    return null
+  }
+
+  return callRewardTokenRead('metadata', {}, sourceAddress, resolvedContractId)
+}
+
+export async function fetchRewardTokenMetadataForContract(tokenContractId, sourceAddress) {
+  const resolvedContractId = toDisplayString(tokenContractId)
+  if (!resolvedContractId) {
+    return null
+  }
+
+  return callRewardTokenRead('metadata', {}, sourceAddress, resolvedContractId)
+}
+
+export async function fetchRewardTokenBalance(walletAddress, sourceAddress) {
+  const resolvedContractId = toDisplayString(REWARD_TOKEN_CONTRACT_ID)
+  if (!resolvedContractId || !walletAddress) {
+    return null
+  }
+
+  return callRewardTokenRead('balance', { id: walletAddress }, sourceAddress, resolvedContractId)
+}
+
+export async function fetchRewardTokenBalanceForContract(tokenContractId, walletAddress, sourceAddress) {
+  const resolvedContractId = toDisplayString(tokenContractId)
+  if (!resolvedContractId || !walletAddress) {
+    return null
+  }
+
+  return callRewardTokenRead('balance', { id: walletAddress }, sourceAddress, resolvedContractId)
+}
+
 export async function fetchVoteStatuses(polls, voterAddress, sourceAddress) {
   if (!voterAddress || polls.length === 0) {
     return {}
+  }
+
+  const pollIds = polls.map((poll) => poll.id)
+
+  try {
+    const flags = await callContractRead(
+      'has_voted_many',
+      { poll_ids: pollIds, voter: voterAddress },
+      sourceAddress,
+    )
+
+    if (Array.isArray(flags) && flags.length === pollIds.length) {
+      return Object.fromEntries(pollIds.map((pollId, index) => [pollId, Boolean(flags[index])]))
+    }
+  } catch {
+    // Fall back to per-poll reads for older deployments.
   }
 
   const voteEntries = await Promise.all(
@@ -314,10 +432,20 @@ export async function fetchVoteStatuses(polls, voterAddress, sourceAddress) {
   return Object.fromEntries(voteEntries)
 }
 
-export async function fetchContractEvents(cursor) {
+export async function fetchContractEvents(cursor, contractIdsOverride) {
   ensureContractConfigured()
 
-  const filters = [{ type: 'contract', contractIds: [CONTRACT_ID] }]
+  const contractIds = (
+    Array.isArray(contractIdsOverride) && contractIdsOverride.length > 0
+      ? contractIdsOverride
+      : [CONTRACT_ID, REWARD_TOKEN_CONTRACT_ID]
+  )
+    .map((contractId) => toDisplayString(contractId))
+    .filter(Boolean)
+
+  const uniqueContractIds = Array.from(new Set(contractIds))
+  const filters = [{ type: 'contract', contractIds }]
+  filters[0].contractIds = uniqueContractIds
 
   if (cursor) {
     const response = await server.getEvents({ filters, cursor, limit: 20 })
@@ -339,6 +467,8 @@ export async function fetchContractEvents(cursor) {
 }
 
 export async function connectWallet() {
+  const { walletKit, FREIGHTER_ID } = await getWalletRuntime()
+
   return new Promise((resolve, reject) => {
     walletKit
       .openModal({
@@ -350,6 +480,9 @@ export async function connectWallet() {
             let address = ''
 
             if (walletOption.id === FREIGHTER_ID) {
+              const { requestAccess: requestFreighterAccess, getAddress: getFreighterAddress } =
+                await import('@stellar/freighter-api')
+
               const accessResponse = await requestFreighterAccess()
               if (accessResponse.error) {
                 throw accessResponse.error
@@ -392,6 +525,8 @@ export async function connectWallet() {
 }
 
 export async function disconnectWallet() {
+  const { walletKit } = await getWalletRuntime()
+
   try {
     await walletKit.disconnect?.()
   } catch {
@@ -405,7 +540,17 @@ export async function submitContractTransaction({
   address,
   onStatus,
 }) {
-  const { tx } = await buildInvocation({ sourceAddress: address, method, args })
+  const { walletKit } = await getWalletRuntime()
+
+  ensureContractConfigured()
+  const spec = await getContractSpec()
+  const { tx } = await buildInvocation({
+    sourceAddress: address,
+    contractId: CONTRACT_ID,
+    spec,
+    method,
+    args,
+  })
   onStatus?.({ phase: 'preparing' })
 
   const prepared = await server.prepareTransaction(tx)

@@ -1096,3 +1096,22 @@
     justify-content: space-between;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard > section {
+    animation: none;
+  }
+
+  .ambient {
+    animation: none;
+  }
+
+  .primary-button,
+  .secondary-button,
+  .ghost-button,
+  .icon-button,
+  .duration-pill,
+  .result-bar-fill {
+    transition: none;
+  }
+}

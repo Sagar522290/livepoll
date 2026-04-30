@@ -19,13 +19,18 @@ const __dirname = path.dirname(__filename)
 
 const rpcUrl = process.env.STELLAR_RPC_URL || 'https://soroban-testnet.stellar.org'
 const networkPassphrase = process.env.STELLAR_NETWORK_PASSPHRASE || Networks.TESTNET
-const wasmPath =
-  process.env.STELLAR_WASM_PATH ||
+const pollWasmPath =
+  process.env.STELLAR_POLL_WASM_PATH ||
   path.resolve(__dirname, '../poll_contract/target/wasm32v1-none/release/poll_contract.wasm')
+const tokenWasmPath =
+  process.env.STELLAR_TOKEN_WASM_PATH ||
+  path.resolve(__dirname, '../token_contract/target/wasm32v1-none/release/reward_token_contract.wasm')
 
 const server = new rpc.Server(rpcUrl)
-const wasm = fs.readFileSync(wasmPath)
-const spec = Spec.fromWasm(wasm)
+const pollWasm = fs.readFileSync(pollWasmPath)
+const tokenWasm = fs.readFileSync(tokenWasmPath)
+const pollSpec = Spec.fromWasm(pollWasm)
+const tokenSpec = Spec.fromWasm(tokenWasm)
 
 function fail(message) {
   throw new Error(message)
@@ -80,7 +85,7 @@ async function sendOperation(sourceKeypair, operation) {
   }
 }
 
-async function uploadContractWasm(sourceKeypair) {
+async function uploadContractWasm(sourceKeypair, wasm) {
   const result = await sendOperation(
     sourceKeypair,
     Operation.uploadContractWasm({ wasm }),
@@ -120,21 +125,16 @@ async function deployContract(sourceKeypair, wasmHash, saltHex) {
   }
 }
 
-async function invokeCreatePoll(sourceKeypair, contractId) {
+async function invokeContractCall({ sourceKeypair, contractId, spec, method, args }) {
   const account = await server.getAccount(sourceKeypair.publicKey())
   const contract = new Contract(contractId)
-  const args = spec.funcArgsToScVals('create_poll', {
-    creator: sourceKeypair.publicKey(),
-    question: 'Which feature should ship next?',
-    options: ['Mobile support', 'Analytics dashboard', 'Theme presets'],
-    duration_minutes: 120,
-  })
+  const scArgs = spec.funcArgsToScVals(method, args)
 
   const tx = new TransactionBuilder(account, {
     fee: BASE_FEE,
     networkPassphrase,
   })
-    .addOperation(contract.call('create_poll', ...args))
+    .addOperation(contract.call(method, ...scArgs))
     .setTimeout(60)
     .build()
 
@@ -152,7 +152,7 @@ async function invokeCreatePoll(sourceKeypair, contractId) {
   })
 
   if (finalResult.status !== 'SUCCESS') {
-    fail(`Sample contract call ended with status ${finalResult.status}.`)
+    fail(`Contract call ended with status ${finalResult.status}.`)
   }
 
   return submission.hash
@@ -160,20 +160,84 @@ async function invokeCreatePoll(sourceKeypair, contractId) {
 
 async function main() {
   const { keypair, generated } = await getSourceKeypair()
-  const upload = await uploadContractWasm(keypair)
-  const deployment = await deployContract(keypair, upload.wasmHash, upload.hash)
-  const sampleCallHash = await invokeCreatePoll(keypair, deployment.contractId)
+
+  const pollUpload = await uploadContractWasm(keypair, pollWasm)
+  const pollDeployment = await deployContract(keypair, pollUpload.wasmHash, pollUpload.hash)
+
+  const tokenUpload = await uploadContractWasm(keypair, tokenWasm)
+  const tokenDeployment = await deployContract(keypair, tokenUpload.wasmHash, tokenUpload.hash)
+
+  const tokenInitTxHash = await invokeContractCall({
+    sourceKeypair: keypair,
+    contractId: tokenDeployment.contractId,
+    spec: tokenSpec,
+    method: 'initialize',
+    args: {
+      admin: pollDeployment.contractId,
+      name: 'LivePoll Rewards',
+      symbol: 'VOTE',
+      decimals: 0,
+    },
+  })
+
+  const rewardsConfigTxHash = await invokeContractCall({
+    sourceKeypair: keypair,
+    contractId: pollDeployment.contractId,
+    spec: pollSpec,
+    method: 'configure_rewards',
+    args: {
+      caller: keypair.publicKey(),
+      token: tokenDeployment.contractId,
+      amount: 10,
+    },
+  })
+
+  const sampleCreatePollTxHash = await invokeContractCall({
+    sourceKeypair: keypair,
+    contractId: pollDeployment.contractId,
+    spec: pollSpec,
+    method: 'create_poll',
+    args: {
+      creator: keypair.publicKey(),
+      question: 'Which feature should ship next?',
+      options: ['Mobile support', 'Analytics dashboard', 'Theme presets'],
+      duration_minutes: 120,
+    },
+  })
+
+  const sampleVoteTxHash = await invokeContractCall({
+    sourceKeypair: keypair,
+    contractId: pollDeployment.contractId,
+    spec: pollSpec,
+    method: 'vote',
+    args: {
+      voter: keypair.publicKey(),
+      poll_id: 1,
+      option_index: 0,
+    },
+  })
 
   const output = {
     rpcUrl,
     networkPassphrase,
     deployerPublicKey: keypair.publicKey(),
     deployerSecret: generated ? keypair.secret() : 'provided-via-env',
-    uploadTxHash: upload.hash,
-    wasmHash: toHex(upload.wasmHash),
-    deployTxHash: deployment.hash,
-    contractId: deployment.contractId,
-    sampleCreatePollTxHash: sampleCallHash,
+    poll: {
+      uploadTxHash: pollUpload.hash,
+      wasmHash: toHex(pollUpload.wasmHash),
+      deployTxHash: pollDeployment.hash,
+      contractId: pollDeployment.contractId,
+    },
+    token: {
+      uploadTxHash: tokenUpload.hash,
+      wasmHash: toHex(tokenUpload.wasmHash),
+      deployTxHash: tokenDeployment.hash,
+      contractId: tokenDeployment.contractId,
+      initTxHash: tokenInitTxHash,
+    },
+    rewardsConfigTxHash,
+    sampleCreatePollTxHash,
+    sampleVoteTxHash,
   }
 
   console.log(JSON.stringify(output, null, 2))
