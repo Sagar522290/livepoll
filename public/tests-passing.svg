@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="340" viewBox="0 0 980 340">
+  <defs>
+    <style>
+      .bg { fill: #0b0f14; }
+      .frame { fill: none; stroke: #253041; stroke-width: 2; }
+      .title { fill: #b8c4d4; font: 600 14px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+      .txt { fill: #d6deeb; font: 13px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+      .ok { fill: #43d08a; font: 13px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+      .muted { fill: #8aa0b8; font: 13px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="980" height="340" rx="14" />
+  <rect class="frame" x="14" y="14" width="952" height="312" rx="12" />
+
+  <text class="title" x="34" y="44">Terminal — npm test</text>
+
+  <text class="txt" x="34" y="76">
+    <tspan class="muted">> live-poll@0.0.0 test</tspan>
+    <tspan x="34" dy="18" class="muted">> node tests/run.mjs</tspan>
+
+    <tspan x="34" dy="28" class="ok">PASS</tspan><tspan class="txt"> parsePollHash extracts poll id</tspan>
+    <tspan x="34" dy="18" class="ok">PASS</tspan><tspan class="txt"> parsePollHash rejects invalid hashes</tspan>
+    <tspan x="34" dy="18" class="ok">PASS</tspan><tspan class="txt"> mergeRecentEvents de-dupes and limits results</tspan>
+    <tspan x="34" dy="18" class="ok">PASS</tspan><tspan class="txt"> getPollState returns active/closed using provided time</tspan>
+    <tspan x="34" dy="18" class="ok">PASS</tspan><tspan class="txt"> poll cache round-trips polls and supports removal</tspan>
+    <tspan x="34" dy="18" class="ok">PASS</tspan><tspan class="txt"> poll cache handles invalid json and legacy arrays</tspan>
+
+    <tspan x="34" dy="28" class="txt">6 passing, 0 failing</tspan>
+  </text>
+</svg>
+
