@@ -1,10 +1,18 @@
 # LivePoll
 
-LivePoll is a Stellar Level 2 submission project: a multi-wallet polling dapp backed by a deployed Soroban smart contract on Stellar Testnet, with real-time contract event sync and visible transaction status updates in the UI.
+LivePoll is a mini end-to-end Stellar + Soroban dApp: a multi-wallet polling app backed by a deployed Soroban smart contract on Stellar Testnet, with real-time contract event sync, transaction progress feedback, basic caching, and a small automated test suite.
+
+## Level 3 Submission Checklist (fill before submitting)
+
+- Live demo link: TODO
+- Demo video (1 minute) link: TODO
+- Test output screenshot (3+ passing tests): TODO (run `npm test` and capture the terminal output)
+- Public GitHub repo link: TODO
+- 3+ meaningful commits for Level 3: TODO
 
 ## Submission Overview
 
-This project demonstrates the required Level 2 skills:
+This project demonstrates:
 
 - Multi-wallet integration with `StellarWalletsKit`
 - Smart contract deployment on Stellar Testnet
@@ -12,6 +20,9 @@ This project demonstrates the required Level 2 skills:
 - Real-time event polling and state synchronization
 - Visible transaction lifecycle feedback
 - Wallet error handling for missing wallet, rejected request, and insufficient balance
+- Loading states and progress indicators during reads/writes
+- Basic caching of recently loaded poll data in `localStorage`
+- Automated tests for core helper logic
 
 ## Key Features
 
@@ -44,7 +55,7 @@ Wallet options available:
 
 ## Live Demo
 
-- Optional: add a deployed Vercel, Netlify, or similar link here before final submission
+- TODO: add a deployed Vercel, Netlify, or similar link here before final submission
 
 ## Setup
 
@@ -80,6 +91,16 @@ npm run dev
 npm run build
 ```
 
+## Tests
+
+Run the automated tests:
+
+```bash
+npm test
+```
+
+For submission, include a screenshot of the terminal output showing **3+ tests passing**.
+
 ## Environment Variables
 
 ```env
@@ -101,15 +122,37 @@ VITE_STELLAR_EXPLORER_URL=https://stellar.expert/explorer/testnet
 - `npm run dev` starts the frontend
 - `npm run build` creates a production build
 - `npm run lint` runs ESLint
+- `npm test` runs the Node.js test suite
 - `npm run contract:build` builds the Soroban contract
 - `npm run contract:deploy` uploads and deploys the contract to testnet
+
+## Deploy (Vercel / Netlify)
+
+This is a standard Vite build.
+
+- Build command: `npm run build`
+- Output directory: `dist`
+- Set the env vars from the section above (at minimum `VITE_STELLAR_CONTRACT_ID` if you deploy a new contract)
+
+## Demo Video (1 minute)
+
+Suggested recording flow:
+
+1. Open the deployed site and show the “Read from contract” panel updating.
+2. Connect a wallet (Freighter or any supported wallet).
+3. Create a poll (show “awaiting-signature” → “pending” → “success”).
+4. Vote on the poll and show the event feed / vote count updating.
+5. Open the contract/tx on Stellar Expert via the links in the UI.
 
 ## Project Structure
 
 - `src/` contains the React frontend
 - `src/lib/stellar.js` contains wallet, RPC, contract, and event helpers
+- `src/lib/pollCache.js` contains the basic poll cache helpers
+- `src/lib/pollLogic.js` contains pure helper functions used by the UI
 - `poll_contract/` contains the Soroban contract
 - `scripts/` contains deployment helpers
+- `tests/` contains the automated test suite
 
 ## Additional Docs
 
@@ -122,3 +165,4 @@ VITE_STELLAR_EXPLORER_URL=https://stellar.expert/explorer/testnet
 - The project includes multiple meaningful commits in git history
 - The contract is deployed on testnet and called from the frontend
 - Real-time event integration and visible transaction status are implemented
+- Before final submission, update the checklist at the top with your live demo link, demo video link, and test screenshot
