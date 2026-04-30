@@ -1189,7 +1189,7 @@ function App() {
           <div className="panel-head controls-head">
             <div>
               <p className="section-label">Poll feed</p>
-              <h3>Browse synced contract data</h3>
+              <h3>Browse synced polls</h3>
             </div>
 
             <div className="control-strip">
@@ -1218,7 +1218,7 @@ function App() {
 
           {isBooting ? (
             <div className="empty-state">
-              <h4>Loading contract state...</h4>
+              <h4>Loading polls...</h4>
               <p>The app is preparing a read account and fetching polls from testnet.</p>
             </div>
           ) : visiblePolls.length === 0 ? (
