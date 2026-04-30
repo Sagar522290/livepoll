@@ -18,11 +18,12 @@ concurrency:
 
 jobs:
   check_pages:
-    name: Check Pages enabled
+    name: Check Pages enabled (Actions)
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:
       enabled: ${{ steps.check.outputs.enabled }}
+      build_type: ${{ steps.check.outputs.build_type }}
 
     steps:
       - name: Check Pages configuration
@@ -30,21 +31,97 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            try {
-              await github.rest.repos.getPages({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const getPages = async () =>
+              github.rest.repos.getPages({
+                owner,
+                repo,
               });
-              core.setOutput('enabled', 'true');
-              core.notice('GitHub Pages is enabled for this repository.');
+
+            const enablePagesForActions = async () => {
+              try {
+                await github.rest.repos.createPagesSite({
+                  owner,
+                  repo,
+                  build_type: 'workflow',
+                });
+                core.notice('Enabled GitHub Pages (Source: GitHub Actions) via API.');
+              } catch (e) {
+                if (e?.status === 409) {
+                  core.notice('GitHub Pages already exists (409).');
+                  return;
+                }
+                throw e;
+              }
+            };
+
+            const setBuildTypeWorkflow = async () => {
+              await github.rest.repos.updateInformationAboutPagesSite({
+                owner,
+                repo,
+                build_type: 'workflow',
+              });
+              core.notice('Updated GitHub Pages build_type to workflow via API.');
+            };
+
+            let pagesRes;
+            try {
+              pagesRes = await getPages();
             } catch (error) {
-              if (error?.status === 404) {
+              if (error?.status !== 404) throw error;
+
+              // Best-effort: enable Pages from within the workflow so deploy-pages
+              // doesn't fail with a 404 on first-time setup.
+              try {
+                await enablePagesForActions();
+                pagesRes = await getPages();
+              } catch (e) {
                 core.setOutput('enabled', 'false');
-                core.warning('GitHub Pages is not enabled for this repository. Enable it in Settings → Pages (Source: GitHub Actions), then re-run this workflow.');
+                core.setOutput('build_type', '');
+                core.warning(
+                  'GitHub Pages is not enabled for this repository, and the workflow could not enable it automatically. ' +
+                  'Enable it in Settings -> Pages -> Build and deployment -> Source: GitHub Actions, then re-run this workflow.'
+                );
+                core.warning(`Enable attempt failed: ${e?.message ?? e}`);
                 return;
               }
-              throw error;
             }
+
+            let buildType = pagesRes?.data?.build_type;
+            core.setOutput('build_type', buildType ?? '');
+
+            if (buildType !== 'workflow') {
+              // Best-effort: switch to Actions-based Pages deployments.
+              try {
+                await setBuildTypeWorkflow();
+                pagesRes = await getPages();
+                buildType = pagesRes?.data?.build_type;
+                core.setOutput('build_type', buildType ?? '');
+              } catch (e) {
+                core.setOutput('enabled', 'false');
+                core.warning(
+                  `GitHub Pages is enabled, but this workflow requires Source: GitHub Actions (build_type=${buildType ?? 'unknown'}). ` +
+                  'Go to Settings -> Pages -> Build and deployment -> Source: GitHub Actions, then re-run this workflow. ' +
+                  'Until then, the build/deploy jobs will be skipped to avoid a 404 from actions/deploy-pages.'
+                );
+                core.warning(`Update attempt failed: ${e?.message ?? e}`);
+                return;
+              }
+            }
+
+            if (buildType !== 'workflow') {
+              core.setOutput('enabled', 'false');
+              core.warning(
+                `GitHub Pages is enabled, but not configured for GitHub Actions (build_type=${buildType ?? 'unknown'}). ` +
+                'Go to Settings -> Pages -> Build and deployment -> Source: GitHub Actions, then re-run this workflow.'
+              );
+              return;
+            }
+
+            core.setOutput('enabled', 'true');
+            core.notice('GitHub Pages is enabled and configured for GitHub Actions.');
 
   build:
     needs: check_pages
@@ -82,6 +159,10 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

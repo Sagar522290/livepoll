@@ -9,8 +9,8 @@ LivePoll is a mini end-to-end Stellar + Soroban dApp: a multi-wallet polling app
 - Live demo link: `https://livepoll-njy1ayhqq-sagar522290s-projects.vercel.app/`
 - Demo video (1 minute) link: TODO
 - Mobile responsive screenshot: TODO (add a screenshot taken at a small viewport width)
-- CI/CD running (badge or screenshot): ✅ (see CI badge at the top)
-- Test output screenshot (3+ passing tests): ✅ (see below)
+- CI/CD running (badge or screenshot): OK (see CI badge at the top)
+- Test output screenshot (3+ passing tests): OK (see below)
 - Public GitHub repo link: `https://github.com/Sagar522290/livepoll.git`
 - Minimum 8+ meaningful commits: TODO
 - Poll contract address: TODO
@@ -107,9 +107,30 @@ npm run dev
 npm run build
 ```
 
+## Wallet (Install + Testnet Funding)
+
+To **create polls** and **vote on-chain**, you need a Soroban-capable Stellar wallet and a funded Testnet account.
+
+Recommended (desktop): **Freighter** browser extension.
+
+1. Install a wallet (Freighter recommended).
+2. Create a new account (and back up your recovery phrase/secret key).
+3. Switch the wallet network to **Stellar Testnet**.
+4. Fund your Testnet account using Friendbot (you need some Testnet XLM for fees):
+
+   - Open `https://friendbot.stellar.org/?addr=G...` (replace `G...` with your public key), or:
+
+   ```bash
+   curl "https://friendbot.stellar.org/?addr=G..."
+   ```
+
+5. Open the app, click **Connect Wallet**, pick your wallet, and approve the requests to sign transactions.
+
 ## CD (GitHub Pages)
 
 The repo includes a GitHub Pages deploy workflow at `.github/workflows/deploy-pages.yml` that builds with `BASE_PATH=/<repo>/` and publishes the `dist/` output.
+
+If you see `actions/deploy-pages` fail with a 404 (`HttpError: Not Found`), GitHub Pages is either not enabled or not configured for Actions. Enable Pages and set **Settings -> Pages -> Build and deployment -> Source: GitHub Actions**, then re-run the workflow.
 
 ## Tests
 
@@ -167,9 +188,9 @@ This is a standard Vite build.
 
 Suggested recording flow:
 
-1. Open the deployed site and show the “Read from contract” panel updating.
+1. Open the deployed site and show the "Read from contract" panel updating.
 2. Connect a wallet (Freighter or any supported wallet).
-3. Create a poll (show “awaiting-signature” → “pending” → “success”).
+3. Create a poll (show "awaiting-signature" -> "pending" -> "success").
 4. Vote on the poll and show the event feed / vote count updating.
 5. Open the contract/tx on Stellar Expert via the links in the UI.
 
