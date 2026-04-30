@@ -1189,7 +1189,6 @@ function App() {
           <div className="panel-head controls-head">
             <div>
               <p className="section-label">Poll feed</p>
-              <h3>Browse synced polls</h3>
             </div>
 
             <div className="control-strip">
