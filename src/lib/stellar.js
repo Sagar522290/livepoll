@@ -470,11 +470,27 @@ export async function connectWallet() {
   const { walletKit, FREIGHTER_ID } = await getWalletRuntime()
 
   return new Promise((resolve, reject) => {
+    let settled = false
+    let selectionInProgress = false
+
+    const safeResolve = (value) => {
+      if (settled) return
+      settled = true
+      resolve(value)
+    }
+
+    const safeReject = (error) => {
+      if (settled) return
+      settled = true
+      reject(error)
+    }
+
     walletKit
       .openModal({
         modalTitle: 'Choose a Stellar wallet',
         notAvailableText: 'Install a Stellar wallet to create and vote on-chain.',
         onWalletSelected: async (walletOption) => {
+          selectionInProgress = true
           try {
             walletKit.setWallet(walletOption.id)
             let address = ''
@@ -507,20 +523,29 @@ export async function connectWallet() {
               throw new Error('The selected wallet did not return a public address.')
             }
 
-            resolve({
+            safeResolve({
               address,
               walletId: walletOption.id,
               walletName: walletOption.name || walletOption.productName || 'Wallet',
             })
           } catch (error) {
-            reject(error)
+            safeReject(error)
+          } finally {
+            selectionInProgress = false
           }
         },
         onClosed: (error) => {
-          reject(error || new Error('The wallet request was closed before finishing.'))
+          // The modal closes immediately after a wallet is selected, which can race
+          // with async address retrieval. Only treat closing as cancellation if the
+          // user closed the modal without selecting a wallet.
+          if (settled || selectionInProgress) {
+            return
+          }
+
+          safeReject(error || new Error('The wallet request was closed before finishing.'))
         },
       })
-      .catch(reject)
+      .catch(safeReject)
   })
 }
 
