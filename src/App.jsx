@@ -1198,15 +1198,16 @@ function App() {
                 placeholder="Search polls or options"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
+                aria-label="Search polls"
               />
 
-              <select value={filter} onChange={(event) => setFilter(event.target.value)}>
+              <select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Filter polls">
                 <option value="all">All</option>
                 <option value="active">Active</option>
                 <option value="closed">Closed</option>
               </select>
 
-              <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+              <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} aria-label="Sort polls">
                 <option value="ending-soon">Ending soon</option>
                 <option value="most-votes">Most votes</option>
                 <option value="newest">Newest</option>
