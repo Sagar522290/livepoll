@@ -21,7 +21,8 @@ import {
 } from '@stellar/freighter-api'
 
 const pollContractWasmUrl =
-  import.meta.env.VITE_POLL_CONTRACT_WASM_URL || '/contracts/poll_contract.wasm'
+  import.meta.env.VITE_POLL_CONTRACT_WASM_URL ||
+  `${import.meta.env.BASE_URL}contracts/poll_contract.wasm`
 
 if (!globalThis.Buffer) {
   globalThis.Buffer = Buffer
