@@ -11,3 +11,7 @@ if (!globalThis.Buffer) {
 if (!globalThis.process) {
   globalThis.process = { env: {} }
 }
+
+if (!globalThis.litIssuedWarnings) {
+  globalThis.litIssuedWarnings = new Set(['dev-mode'])
+}

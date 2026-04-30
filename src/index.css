@@ -1,13 +1,24 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 :root {
-  color-scheme: dark;
-  --bg: #050913;
-  --text-main: #f8fafc;
-  --muted-text: #bfd1e9;
-  --subtle-text: #8aa0c0;
-  --accent-strong: #fbbf24;
-  --panel-border: rgba(148, 163, 184, 0.14);
+  color-scheme: light;
+  --bg-base: #f4efe5;
+  --bg-warm: #f8d7bf;
+  --bg-mint: #c9ebe3;
+  --bg-rose: #f6c7b3;
+  --surface: rgba(255, 252, 247, 0.78);
+  --surface-strong: rgba(255, 250, 243, 0.92);
+  --surface-dark: #143642;
+  --border-soft: rgba(20, 54, 66, 0.12);
+  --border-strong: rgba(20, 54, 66, 0.2);
+  --text-main: #16303a;
+  --text-soft: #4f6770;
+  --text-faint: #7f9198;
+  --accent-strong: #db6a4e;
+  --accent-secondary: #1f8a70;
+  --accent-gold: #db9f2f;
+  --shadow-soft: 0 24px 80px rgba(93, 71, 45, 0.12);
+  --shadow-card: 0 22px 46px rgba(39, 51, 58, 0.12);
 }
 
 * {
@@ -22,43 +33,59 @@ body,
   min-height: 100vh;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background:
-    radial-gradient(circle at top left, rgba(245, 158, 11, 0.13), transparent 30%),
-    radial-gradient(circle at 85% 20%, rgba(56, 189, 248, 0.1), transparent 28%),
-    linear-gradient(180deg, #060b15, #04070f 55%, #07111d 100%);
   color: var(--text-main);
+  background:
+    radial-gradient(circle at top left, rgba(219, 106, 78, 0.18), transparent 28%),
+    radial-gradient(circle at 85% 18%, rgba(31, 138, 112, 0.16), transparent 24%),
+    radial-gradient(circle at 50% 100%, rgba(219, 159, 47, 0.16), transparent 26%),
+    linear-gradient(180deg, #fbf3e7 0%, #f5ede2 52%, #efe4d6 100%);
   overflow-x: hidden;
 }
 
-body::before {
+body::before,
+body::after {
   content: '';
   position: fixed;
   inset: 0;
-  z-index: -1;
   pointer-events: none;
-  opacity: 0.03;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 256px 256px;
+  z-index: -1;
+}
+
+body::before {
+  opacity: 0.55;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.28) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.22) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0));
+}
+
+body::after {
+  inset: auto auto -10rem 58%;
+  width: 28rem;
+  height: 28rem;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(31, 138, 112, 0.22), transparent 65%);
+  filter: blur(28px);
 }
 
 #root {
   width: 100%;
   max-width: 100%;
   margin: 0;
-  text-align: left;
-  border: none;
   min-height: 100svh;
+  text-align: left;
 }
 
-button {
-  font-family: inherit;
-}
-
+button,
 input,
 select,
 textarea {
@@ -67,4 +94,9 @@ textarea {
 
 a {
   color: inherit;
+}
+
+::selection {
+  background: rgba(219, 106, 78, 0.22);
+  color: var(--text-main);
 }

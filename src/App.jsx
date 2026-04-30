@@ -28,6 +28,39 @@ const EMPTY_FORM = {
 }
 
 const DURATION_PRESETS = [5, 15, 30, 60, 180, 1440]
+const POLL_CACHE_STORAGE_KEY = 'livepoll_cached_polls'
+
+function readCachedPolls() {
+  try {
+    const cached = window.localStorage.getItem(POLL_CACHE_STORAGE_KEY)
+    if (!cached) {
+      return []
+    }
+
+    const parsed = JSON.parse(cached)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function writeCachedPolls(polls) {
+  try {
+    if (!polls.length) {
+      window.localStorage.removeItem(POLL_CACHE_STORAGE_KEY)
+      return
+    }
+
+    window.localStorage.setItem(POLL_CACHE_STORAGE_KEY, JSON.stringify(polls))
+  } catch {
+    // Cache writes are best effort only.
+  }
+}
+
+function removeCachedPoll(pollId) {
+  const remainingPolls = readCachedPolls().filter((poll) => poll.id !== pollId)
+  writeCachedPolls(remainingPolls)
+}
 
 function shortenAddress(address) {
   if (!address) {
@@ -84,6 +117,82 @@ function formatTimeLeft(expiresAt) {
 
 function getPollState(poll) {
   return Date.now() > poll.expiresAt || !poll.active ? 'closed' : 'active'
+}
+
+function getVoteActionState({ poll, walletAddress, hasVoted, transactionPhase, isWalletBusy }) {
+  if (!walletAddress) {
+    return {
+      label: isWalletBusy ? 'Opening wallets...' : 'Connect wallet to vote',
+      disabled: isWalletBusy,
+      action: 'connect',
+    }
+  }
+
+  if (getPollState(poll) === 'closed') {
+    return {
+      label: 'Poll closed',
+      disabled: true,
+      action: 'closed',
+    }
+  }
+
+  if (hasVoted) {
+    return {
+      label: 'Already voted',
+      disabled: true,
+      action: 'voted',
+    }
+  }
+
+  if (transactionPhase === 'preparing' || transactionPhase === 'awaiting-signature' || transactionPhase === 'pending') {
+    return {
+      label: 'Submitting...',
+      disabled: true,
+      action: 'pending',
+    }
+  }
+
+  return {
+    label: 'Vote',
+    disabled: false,
+    action: 'vote',
+  }
+}
+
+function getCreatePollActionState({ walletAddress, transactionPhase, isWalletBusy }) {
+  if (!walletAddress) {
+    return {
+      label: isWalletBusy ? 'Opening wallets...' : 'Connect wallet to create',
+      disabled: isWalletBusy,
+      action: 'connect',
+    }
+  }
+
+  if (
+    transactionPhase === 'preparing' ||
+    transactionPhase === 'awaiting-signature' ||
+    transactionPhase === 'pending'
+  ) {
+    return {
+      label: 'Submitting...',
+      disabled: true,
+      action: 'pending',
+    }
+  }
+
+  return {
+    label: 'Create on-chain poll',
+    disabled: false,
+    action: 'create',
+  }
+}
+
+function normalizeAddress(address) {
+  return String(address || '').trim().toUpperCase()
+}
+
+function isPollOwner(poll, walletAddress) {
+  return normalizeAddress(walletAddress) !== '' && normalizeAddress(walletAddress) === normalizeAddress(poll?.creator)
 }
 
 function parsePollHash(hashValue) {
@@ -202,7 +311,7 @@ function classifyError(error) {
 
 function App() {
   const [wallet, setWallet] = useState(null)
-  const [polls, setPolls] = useState([])
+  const [polls, setPolls] = useState(() => readCachedPolls())
   const [voteLookup, setVoteLookup] = useState({})
   const [selectedPollId, setSelectedPollId] = useState(null)
   const [filter, setFilter] = useState('all')
@@ -227,6 +336,19 @@ function App() {
   const selectedPoll = useMemo(
     () => polls.find((poll) => poll.id === selectedPollId) || null,
     [polls, selectedPollId],
+  )
+  const selectedPollState = selectedPoll ? getPollState(selectedPoll) : null
+  const selectedPollTotalVotes = selectedPoll
+    ? selectedPoll.votes.reduce((sum, vote) => sum + vote, 0)
+    : 0
+  const createPollAction = useMemo(
+    () =>
+      getCreatePollActionState({
+        walletAddress: wallet?.address,
+        transactionPhase: transaction.phase,
+        isWalletBusy,
+      }),
+    [isWalletBusy, transaction.phase, wallet?.address],
   )
 
   const visiblePolls = useMemo(() => {
@@ -294,6 +416,10 @@ function App() {
     const timer = window.setTimeout(() => setNotice(null), 5000)
     return () => window.clearTimeout(timer)
   }, [notice])
+
+  useEffect(() => {
+    writeCachedPolls(polls)
+  }, [polls])
 
   function showNotice(type, title, message) {
     setNotice({ type, title, message })
@@ -430,6 +556,11 @@ function App() {
     setPollHash(pollId)
   }
 
+  function dismissSelectedPoll() {
+    setSelectedPollId(null)
+    clearPollHash()
+  }
+
   async function handleConnectWallet() {
     setIsWalletBusy(true)
 
@@ -457,6 +588,14 @@ function App() {
 
   function updateTransactionStatus(update) {
     setTransaction((current) => ({ ...current, ...update }))
+  }
+
+  async function handleMenuDeletePoll(pollId) {
+    if (!window.confirm(`Delete poll #${pollId}? This removes it from the contract and stored cache.`)) {
+      return
+    }
+
+    await handleDeletePoll(pollId)
   }
 
   async function runContractWrite(method, args, successTitle, successMessage) {
@@ -558,9 +697,19 @@ function App() {
       'The contract removed this poll and the UI is syncing the latest list.',
     )
 
-    if (deleted && selectedPollId === pollId) {
-      setSelectedPollId(null)
-      clearPollHash()
+    if (deleted) {
+      removeCachedPoll(pollId)
+      setPolls((current) => current.filter((poll) => poll.id !== pollId))
+      setVoteLookup((current) => {
+        const next = { ...current }
+        delete next[pollId]
+        return next
+      })
+
+      if (selectedPollId === pollId) {
+        setSelectedPollId(null)
+        clearPollHash()
+      }
     }
   }
 
@@ -612,8 +761,37 @@ function App() {
           </div>
 
           {wallet ? (
-            <button className="secondary-button" onClick={handleDisconnectWallet}>
-              {shortenAddress(wallet.address)}
+            <button
+              className="secondary-button wallet-disconnect-button"
+              onClick={handleDisconnectWallet}
+              type="button"
+              aria-label={`Disconnect wallet ${wallet.address}`}
+            >
+              <span className="wallet-disconnect-copy">
+                <span className="wallet-disconnect-status">Wallet connected</span>
+                <span className="wallet-disconnect-address">{shortenAddress(wallet.address)}</span>
+              </span>
+              <span className="disconnect-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path
+                    d="M14 7V5a2 2 0 0 0-2-2H5A2 2 0 0 0 3 5v14a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-2"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M10 12h11m-4-4 4 4-4 4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </span>
+              <span className="wallet-disconnect-label">Disconnect</span>
             </button>
           ) : (
             <button className="primary-button" onClick={handleConnectWallet} disabled={isWalletBusy}>
@@ -763,8 +941,17 @@ function App() {
               <button className="secondary-button" onClick={() => setForm(EMPTY_FORM)} type="button">
                 Reset
               </button>
-              <button className="primary-button" onClick={handleCreatePoll} type="button">
-                {wallet ? 'Create on-chain poll' : 'Connect wallet to create'}
+              <button
+                className="primary-button"
+                onClick={() =>
+                  createPollAction.action === 'connect'
+                    ? handleConnectWallet()
+                    : handleCreatePoll()
+                }
+                disabled={createPollAction.disabled}
+                type="button"
+              >
+                {createPollAction.label}
               </button>
             </div>
           </article>
@@ -922,27 +1109,29 @@ function App() {
                       <button className="secondary-button" onClick={() => openPollDetails(poll.id)} type="button">
                         View details
                       </button>
-                      <button
-                        className="ghost-button"
-                        onClick={() => {
-                          const shareLink = `${window.location.origin}${window.location.pathname}${window.location.search}#poll-${poll.id}`
-                          navigator.clipboard
-                            .writeText(shareLink)
-                            .then(() => {
-                              showNotice('info', 'Share link copied', `Link copied for poll #${poll.id}.`)
-                            })
-                            .catch(() => {
-                              showNotice(
-                                'error',
-                                'Copy failed',
-                                'Clipboard access was blocked, so the share link could not be copied.',
-                              )
-                            })
-                        }}
-                        type="button"
-                      >
-                        Copy link
-                      </button>
+                      <div className="detail-actions">
+                        <button
+                          className="ghost-button"
+                          onClick={() => {
+                            const shareLink = `${window.location.origin}${window.location.pathname}${window.location.search}#poll-${poll.id}`
+                            navigator.clipboard
+                              .writeText(shareLink)
+                              .then(() => {
+                                showNotice('info', 'Share link copied', `Link copied for poll #${poll.id}.`)
+                              })
+                              .catch(() => {
+                                showNotice(
+                                  'error',
+                                  'Copy failed',
+                                  'Clipboard access was blocked, so the share link could not be copied.',
+                                )
+                              })
+                          }}
+                          type="button"
+                        >
+                          Copy link
+                        </button>
+                      </div>
                     </div>
                   </article>
                 )
@@ -958,16 +1147,20 @@ function App() {
                 <p className="section-label">Selected poll</p>
                 <h3>{selectedPoll.question}</h3>
               </div>
-              <button
-                className="ghost-button"
-                onClick={() => {
-                  setSelectedPollId(null)
-                  clearPollHash()
-                }}
-                type="button"
-              >
-                Close
-              </button>
+              <div className="detail-head-actions">
+                {isPollOwner(selectedPoll, wallet?.address) && selectedPollState === 'active' && (
+                  <button
+                    className="secondary-button"
+                    onClick={() => handleClosePoll(selectedPoll.id)}
+                    type="button"
+                  >
+                    Close poll
+                  </button>
+                )}
+                <button className="ghost-button" onClick={dismissSelectedPoll} type="button">
+                  Dismiss
+                </button>
+              </div>
             </div>
 
             <p className="detail-meta">
@@ -976,11 +1169,26 @@ function App() {
             </p>
             <p className="detail-meta">Expires {new Date(selectedPoll.expiresAt).toLocaleString()}</p>
 
+            <div className="detail-summary">
+              <span className={`state-pill ${selectedPollState}`}>{selectedPollState}</span>
+              <span className="panel-meta">{selectedPollTotalVotes} total votes</span>
+              <span className="time-pill">{formatTimeLeft(selectedPoll.expiresAt)}</span>
+            </div>
+
             <div className="results-stack">
               {selectedPoll.options.map((option, index) => {
                 const votes = selectedPoll.votes[index] || 0
-                const totalVotes = selectedPoll.votes.reduce((sum, vote) => sum + vote, 0)
-                const percentage = totalVotes === 0 ? 0 : Math.round((votes / totalVotes) * 100)
+                const percentage =
+                  selectedPollTotalVotes === 0
+                    ? 0
+                    : Math.round((votes / selectedPollTotalVotes) * 100)
+                const voteAction = getVoteActionState({
+                  poll: selectedPoll,
+                  walletAddress: wallet?.address,
+                  hasVoted: Boolean(voteLookup[selectedPoll.id]),
+                  transactionPhase: transaction.phase,
+                  isWalletBusy,
+                })
 
                 return (
                   <div key={`${selectedPoll.id}-${option}`} className="result-row">
@@ -997,15 +1205,15 @@ function App() {
 
                     <button
                       className="primary-button small"
-                      onClick={() => handleVote(selectedPoll.id, index)}
-                      disabled={
-                        !wallet ||
-                        getPollState(selectedPoll) === 'closed' ||
-                        voteLookup[selectedPoll.id]
+                      onClick={() =>
+                        voteAction.action === 'connect'
+                          ? handleConnectWallet()
+                          : handleVote(selectedPoll.id, index)
                       }
+                      disabled={voteAction.disabled}
                       type="button"
                     >
-                      {voteLookup[selectedPoll.id] ? 'Already voted' : 'Vote'}
+                      {voteAction.label}
                     </button>
                   </div>
                 )
@@ -1023,25 +1231,14 @@ function App() {
                 </p>
               </div>
 
-              {wallet?.address === selectedPoll.creator && (
-                <div className="detail-actions">
-                  {getPollState(selectedPoll) === 'active' && (
-                    <button
-                      className="secondary-button"
-                      onClick={() => handleClosePoll(selectedPoll.id)}
-                      type="button"
-                    >
-                      Close poll on-chain
-                    </button>
-                  )}
-                  <button
-                    className="secondary-button danger"
-                    onClick={() => handleDeletePoll(selectedPoll.id)}
-                    type="button"
-                  >
-                    Delete poll on-chain
-                  </button>
-                </div>
+              {isPollOwner(selectedPoll, wallet?.address) && (
+                <button
+                  className="secondary-button danger"
+                  onClick={() => handleMenuDeletePoll(selectedPoll.id)}
+                  type="button"
+                >
+                  Delete poll
+                </button>
               )}
             </div>
           </section>
