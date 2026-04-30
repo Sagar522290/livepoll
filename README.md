@@ -132,6 +132,8 @@ The repo includes a GitHub Pages deploy workflow at `.github/workflows/deploy-pa
 
 If you see `actions/deploy-pages` fail with a 404 (`HttpError: Not Found`), GitHub Pages is either not enabled or not configured for Actions. Enable Pages and set **Settings -> Pages -> Build and deployment -> Source: GitHub Actions**, then re-run the workflow.
 
+If it still fails, also check **Settings -> Actions -> General -> Workflow permissions** is set to **Read and write permissions**.
+
 ## Tests
 
 Run the automated tests:

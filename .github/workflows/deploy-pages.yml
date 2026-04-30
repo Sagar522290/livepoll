@@ -21,6 +21,9 @@ jobs:
     name: Check Pages enabled (Actions)
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    permissions:
+      contents: read
+      pages: write
     outputs:
       enabled: ${{ steps.check.outputs.enabled }}
       build_type: ${{ steps.check.outputs.build_type }}
@@ -35,14 +38,11 @@ jobs:
             const repo = context.repo.repo;
 
             const getPages = async () =>
-              github.rest.repos.getPages({
-                owner,
-                repo,
-              });
+              github.request('GET /repos/{owner}/{repo}/pages', { owner, repo });
 
             const enablePagesForActions = async () => {
               try {
-                await github.rest.repos.createPagesSite({
+                await github.request('POST /repos/{owner}/{repo}/pages', {
                   owner,
                   repo,
                   build_type: 'workflow',
@@ -58,7 +58,7 @@ jobs:
             };
 
             const setBuildTypeWorkflow = async () => {
-              await github.rest.repos.updateInformationAboutPagesSite({
+              await github.request('PUT /repos/{owner}/{repo}/pages', {
                 owner,
                 repo,
                 build_type: 'workflow',
@@ -117,6 +117,20 @@ jobs:
                 `GitHub Pages is enabled, but not configured for GitHub Actions (build_type=${buildType ?? 'unknown'}). ` +
                 'Go to Settings -> Pages -> Build and deployment -> Source: GitHub Actions, then re-run this workflow.'
               );
+              return;
+            }
+
+            // Confirm the token can actually write to Pages; otherwise deploy-pages may fail
+            // with a confusing 404 even when Pages is configured.
+            try {
+              await setBuildTypeWorkflow();
+            } catch (e) {
+              core.setOutput('enabled', 'false');
+              core.warning(
+                'GitHub Pages is configured for GitHub Actions, but this workflow token cannot write Pages. ' +
+                'In Settings -> Actions -> General -> Workflow permissions, select "Read and write permissions", then re-run this workflow.'
+              );
+              core.warning(`Write check failed: ${e?.status ?? 'unknown'} ${e?.message ?? e}`);
               return;
             }
 
