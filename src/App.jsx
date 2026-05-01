@@ -214,7 +214,7 @@ function classifyError(error) {
   ) {
     return {
       title: 'Wallet request rejected',
-      message: 'The wallet request was cancelled before it could sign the transaction.',
+      message: 'The wallet request was cancelled before it could complete.',
     }
   }
 

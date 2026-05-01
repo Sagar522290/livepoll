@@ -51,6 +51,31 @@ export const server = new rpc.Server(RPC_URL)
 
 const specCache = new Map()
 let walletRuntimePromise = null
+let connectWalletPromise = null
+
+function asError(value, fallbackMessage = 'Unknown error') {
+  if (value instanceof Error) {
+    return value
+  }
+
+  const message = value?.message || value?.error || String(value || fallbackMessage)
+  return new Error(message)
+}
+
+function withTimeout(promise, { timeoutMs, timeoutMessage }) {
+  let timeoutId = null
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = globalThis.setTimeout(() => {
+      reject(new Error(timeoutMessage || 'Timed out waiting for wallet response.'))
+    }, timeoutMs)
+  })
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId != null) {
+      globalThis.clearTimeout(timeoutId)
+    }
+  })
+}
 
 async function getWalletRuntime() {
   if (walletRuntimePromise) {
@@ -469,86 +494,106 @@ export async function fetchContractEvents(cursor, contractIdsOverride) {
 }
 
 export async function connectWallet() {
-  const { walletKit, FREIGHTER_ID } = await getWalletRuntime()
+  if (connectWalletPromise) {
+    return connectWalletPromise
+  }
 
-  return new Promise((resolve, reject) => {
-    let settled = false
-    let selectionInProgress = false
+  connectWalletPromise = (async () => {
+    const { walletKit, FREIGHTER_ID } = await getWalletRuntime()
 
-    const safeResolve = (value) => {
-      if (settled) return
-      settled = true
-      resolve(value)
-    }
+    return new Promise((resolve, reject) => {
+      let settled = false
+      let selectionInProgress = false
 
-    const safeReject = (error) => {
-      if (settled) return
-      settled = true
-      reject(error)
-    }
+      const safeResolve = (value) => {
+        if (settled) return
+        settled = true
+        resolve(value)
+      }
 
-    walletKit
-      .openModal({
-        modalTitle: 'Choose a Stellar wallet',
-        notAvailableText: 'Install a Stellar wallet to create and vote on-chain.',
-        onWalletSelected: async (walletOption) => {
-          selectionInProgress = true
-          try {
-            walletKit.setWallet(walletOption.id)
-            let address = ''
+      const safeReject = (error) => {
+        if (settled) return
+        settled = true
+        reject(asError(error))
+      }
 
-            if (walletOption.id === FREIGHTER_ID) {
-              const { requestAccess: requestFreighterAccess, getAddress: getFreighterAddress } =
-                await import('@stellar/freighter-api')
+      walletKit
+        .openModal({
+          modalTitle: 'Choose a Stellar wallet',
+          notAvailableText: 'Install a Stellar wallet to create and vote on-chain.',
+          onWalletSelected: async (walletOption) => {
+            selectionInProgress = true
+            try {
+              walletKit.setWallet(walletOption.id)
 
-              const accessResponse = await requestFreighterAccess()
-              if (accessResponse.error) {
-                throw accessResponse.error
-              }
+              const address = await withTimeout(
+                (async () => {
+                  if (walletOption.id === FREIGHTER_ID) {
+                    const { requestAccess: requestFreighterAccess, getAddress: getFreighterAddress } =
+                      await import('@stellar/freighter-api')
 
-              address = accessResponse.address
+                    const accessResponse = await requestFreighterAccess()
+                    if (accessResponse.error) {
+                      throw accessResponse.error
+                    }
+
+                    if (accessResponse.address) {
+                      return accessResponse.address
+                    }
+
+                    const freighterAddressResponse = await getFreighterAddress()
+                    if (freighterAddressResponse.error) {
+                      throw freighterAddressResponse.error
+                    }
+
+                    return freighterAddressResponse.address
+                  }
+
+                  const response = await walletKit.getAddress()
+                  return response.address
+                })(),
+                {
+                  timeoutMs: 30_000,
+                  timeoutMessage:
+                    'Timed out waiting for the wallet to return an address. Check pop-up blockers or try again.',
+                },
+              )
 
               if (!address) {
-                const freighterAddressResponse = await getFreighterAddress()
-                if (freighterAddressResponse.error) {
-                  throw freighterAddressResponse.error
-                }
-
-                address = freighterAddressResponse.address
+                throw new Error('The selected wallet did not return a public address.')
               }
-            } else {
-              const response = await walletKit.getAddress()
-              address = response.address
+
+              safeResolve({
+                address,
+                walletId: walletOption.id,
+                walletName: walletOption.name || walletOption.productName || 'Wallet',
+              })
+            } catch (error) {
+              safeReject(error)
+            } finally {
+              selectionInProgress = false
+            }
+          },
+          onClosed: (error) => {
+            // The modal closes immediately after a wallet is selected, which can race
+            // with async address retrieval. Only treat closing as cancellation if the
+            // user closed the modal without selecting a wallet.
+            if (settled || selectionInProgress) {
+              return
             }
 
-            if (!address) {
-              throw new Error('The selected wallet did not return a public address.')
-            }
+            safeReject(error || new Error('The wallet request was closed before finishing.'))
+          },
+        })
+        .catch(safeReject)
+    })
+  })()
 
-            safeResolve({
-              address,
-              walletId: walletOption.id,
-              walletName: walletOption.name || walletOption.productName || 'Wallet',
-            })
-          } catch (error) {
-            safeReject(error)
-          } finally {
-            selectionInProgress = false
-          }
-        },
-        onClosed: (error) => {
-          // The modal closes immediately after a wallet is selected, which can race
-          // with async address retrieval. Only treat closing as cancellation if the
-          // user closed the modal without selecting a wallet.
-          if (settled || selectionInProgress) {
-            return
-          }
-
-          safeReject(error || new Error('The wallet request was closed before finishing.'))
-        },
-      })
-      .catch(safeReject)
-  })
+  try {
+    return await connectWalletPromise
+  } finally {
+    connectWalletPromise = null
+  }
 }
 
 export async function disconnectWallet() {
