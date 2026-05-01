@@ -6,7 +6,7 @@ LivePoll is a mini end-to-end Stellar + Soroban dApp: a multi-wallet polling app
 
 ## Level 4 Submission Checklist (fill before submitting)
 
-- Live demo link: `https://livepoll-njy1ayhqq-sagar522290s-projects.vercel.app/`
+- Live demo link: `https://drive.google.com/file/d/1eUm5kmK_p-xXp4dgX4RVC0tJYb404JsP/view?usp=sharing`
 - Demo video (1 minute) link: `https://drive.google.com/file/d/1eUm5kmK_p-xXp4dgX4RVC0tJYb404JsP/view?usp=drive_link`
 - Mobile responsive screenshot: TODO (add a screenshot taken at a small viewport width)
 - CI/CD running (badge or screenshot): OK (see CI badge at the top)
