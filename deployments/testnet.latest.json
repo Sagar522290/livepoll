@@ -1,0 +1,21 @@
+{
+  "rpcUrl": "https://soroban-testnet.stellar.org",
+  "networkPassphrase": "Test SDF Network ; September 2015",
+  "deployerPublicKey": "GCDEDMDVVH7TEWH3X5JGDVAXV5Y7FETIJMHFJLXE6NCOWJNXBJSA2RE4",
+  "poll": {
+    "uploadTxHash": "ca5809303f6451e35dd520814e6e6b07e2aac951f0e9cf2618b3f8ef05b0960a",
+    "wasmHash": "182cf0e70089d20f09974dc9ac15ea7e5a1dbffdcb45932b884958b61ab3f5a8",
+    "deployTxHash": "9528cd7a004a5fadaa0c9f3a0ae6c6e80d1a14805cfe61b916f5b40646700a5e",
+    "contractId": "CD53KJA5OU43QYVJ3GNU72LCWOTJWPFIIXFSCABWQ7B55Y7G3OGARKMM"
+  },
+  "token": {
+    "uploadTxHash": "58ef3d4ce1b3df06ecbc15612e2ef0b7cd3f4771597636b940067978e8cfc4f4",
+    "wasmHash": "d5c7b913ba50b5ba91794c2ae7fcb23d21327b3d59f0274f41b53cfa86e71759",
+    "deployTxHash": "61ec2c83bd311f8746e9b020f02018fc319d9ea944416b2ed7d45b930704aa6c",
+    "contractId": "CAYH4VFCCZTBFQZGDTDUSRNXTUNR33RLQKRVQZTDYSUZBXVATFE4HREQ",
+    "initTxHash": "8985c77edf3cda881f59e24319b208d985e8efd874fb87c7f7c9ea733dc04824"
+  },
+  "rewardsConfigTxHash": "73e220d625e84cf9f52561f793894bd590b6f26087b84c2b14e503d188ea95cc",
+  "sampleCreatePollTxHash": "7e4cf4726ac994cfe672e2dbe12a85ce9f3cac0da352fdf0e8f93be964ee945d",
+  "sampleVoteTxHash": "9cfbd2da7ad82b76c5427141bb9fbd1387ff5a5b916c242498ed03ed048992ad"
+}

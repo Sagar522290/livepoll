@@ -26,3 +26,6 @@ token_contract/target/
 *.sln
 *.sw?
 node_modules
+
+deployments/*.secret.json
+deployments/*private*.json

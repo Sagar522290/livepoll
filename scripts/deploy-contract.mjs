@@ -221,7 +221,12 @@ async function main() {
     rpcUrl,
     networkPassphrase,
     deployerPublicKey: keypair.publicKey(),
-    deployerSecret: generated ? keypair.secret() : 'provided-via-env',
+    deployerSecret:
+      process.env.PRINT_DEPLOYER_SECRET === '1'
+        ? generated
+          ? keypair.secret()
+          : 'provided-via-env'
+        : undefined,
     poll: {
       uploadTxHash: pollUpload.hash,
       wasmHash: toHex(pollUpload.wasmHash),
@@ -240,7 +245,19 @@ async function main() {
     sampleVoteTxHash,
   }
 
-  console.log(JSON.stringify(output, null, 2))
+  const sanitizedOutput = { ...output }
+  delete sanitizedOutput.deployerSecret
+
+  const deploymentsDir = path.resolve(__dirname, '../deployments')
+  fs.mkdirSync(deploymentsDir, { recursive: true })
+  fs.writeFileSync(
+    path.join(deploymentsDir, 'testnet.latest.json'),
+    `${JSON.stringify(sanitizedOutput, null, 2)}\n`,
+    'utf8',
+  )
+
+  // Keep printing JSON for copy/paste into README or env files.
+  console.log(JSON.stringify(sanitizedOutput, null, 2))
 }
 
 main().catch((error) => {
