@@ -12,10 +12,10 @@ This folder contains the Soroban smart contract used by LivePoll for storing pol
 ## Network Details
 
 - Network: `Stellar Testnet`
-- Contract address: `CBGJGJOFFSY5KK7DHFENNBGASXROVG5GEW2MISGJ2N2F7VLHCCUJ42UA`
-- Contract explorer: https://stellar.expert/explorer/testnet/contract/CBGJGJOFFSY5KK7DHFENNBGASXROVG5GEW2MISGJ2N2F7VLHCCUJ42UA
-- Sample contract call tx hash: `282d8793c1968e02b32d6d23d688b930a01c316056c908acfd6b685b8089f67e`
-- Sample call explorer: https://stellar.expert/explorer/testnet/tx/282d8793c1968e02b32d6d23d688b930a01c316056c908acfd6b685b8089f67e
+- Contract address: `CD53KJA5OU43QYVJ3GNU72LCWOTJWPFIIXFSCABWQ7B55Y7G3OGARKMM`
+- Contract explorer: https://stellar.expert/explorer/testnet/contract/CD53KJA5OU43QYVJ3GNU72LCWOTJWPFIIXFSCABWQ7B55Y7G3OGARKMM
+- Sample `create_poll` tx hash: `7e4cf4726ac994cfe672e2dbe12a85ce9f3cac0da352fdf0e8f93be964ee945d`
+- Sample `vote` tx hash (also mints rewards): `9cfbd2da7ad82b76c5427141bb9fbd1387ff5a5b916c242498ed03ed048992ad`
 
 ## Build
 
@@ -49,8 +49,9 @@ The deploy script:
 
 ## Deployment Record
 
-These values were generated on April 27, 2026 during testnet deployment:
+These values were generated on May 1, 2026 during testnet deployment:
 
-- WASM upload tx: `6c6781692a1c69e58231105680b7285f6c77d431fd66645e1df2e55c45a18547`
-- Contract deploy tx: `3a83a32bb31421fce9b501b5720f535baf59a52a667eda8b63b16172ae23217c`
-- Sample create poll tx: `282d8793c1968e02b32d6d23d688b930a01c316056c908acfd6b685b8089f67e`
+- WASM upload tx: `ca5809303f6451e35dd520814e6e6b07e2aac951f0e9cf2618b3f8ef05b0960a`
+- Contract deploy tx: `9528cd7a004a5fadaa0c9f3a0ae6c6e80d1a14805cfe61b916f5b40646700a5e`
+- Sample create poll tx: `7e4cf4726ac994cfe672e2dbe12a85ce9f3cac0da352fdf0e8f93be964ee945d`
+- Sample vote tx: `9cfbd2da7ad82b76c5427141bb9fbd1387ff5a5b916c242498ed03ed048992ad`

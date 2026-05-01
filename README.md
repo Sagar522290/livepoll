@@ -12,10 +12,10 @@ LivePoll is a mini end-to-end Stellar + Soroban dApp: a multi-wallet polling app
 - CI/CD running (badge or screenshot): OK (see CI badge at the top)
 - Test output screenshot (3+ passing tests): OK (see below)
 - Public GitHub repo link: `https://github.com/Sagar522290/livepoll.git`
-- Minimum 8+ meaningful commits: TODO
-- Poll contract address: TODO
-- Reward token address: TODO
-- Inter-contract call tx hash (vote + reward): TODO
+- Minimum 8+ meaningful commits: OK (`33` commits)
+- Poll contract address: `CD53KJA5OU43QYVJ3GNU72LCWOTJWPFIIXFSCABWQ7B55Y7G3OGARKMM`
+- Reward token address: `CAYH4VFCCZTBFQZGDTDUSRNXTUNR33RLQKRVQZTDYSUZBXVATFE4HREQ`
+- Inter-contract call tx hash (vote + reward): `9cfbd2da7ad82b76c5427141bb9fbd1387ff5a5b916c242498ed03ed048992ad`
 
 ## Test Output (Screenshot)
 
@@ -58,10 +58,11 @@ Wallet options available:
 ## Deployed Contracts (Testnet)
 
 - Network: `Stellar Testnet`
-- Poll contract address: TODO
-- Reward token address: TODO
-- Reward configuration tx hash: TODO
-- Inter-contract call tx hash (vote + reward mint): TODO
+- Poll contract address: `CD53KJA5OU43QYVJ3GNU72LCWOTJWPFIIXFSCABWQ7B55Y7G3OGARKMM`
+- Reward token address: `CAYH4VFCCZTBFQZGDTDUSRNXTUNR33RLQKRVQZTDYSUZBXVATFE4HREQ`
+- Reward configuration tx hash: `73e220d625e84cf9f52561f793894bd590b6f26087b84c2b14e503d188ea95cc`
+- Inter-contract call tx hash (vote + reward mint): `9cfbd2da7ad82b76c5427141bb9fbd1387ff5a5b916c242498ed03ed048992ad`
+- Deployment record (JSON): `deployments/testnet.latest.json`
 
 ## Live Demo
 
@@ -149,8 +150,8 @@ For submission, include a screenshot of the terminal output showing **3+ tests p
 ```env
 VITE_STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 VITE_STELLAR_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
-VITE_STELLAR_CONTRACT_ID=CBGJGJOFFSY5KK7DHFENNBGASXROVG5GEW2MISGJ2N2F7VLHCCUJ42UA
-VITE_REWARD_TOKEN_CONTRACT_ID=
+VITE_STELLAR_CONTRACT_ID=CD53KJA5OU43QYVJ3GNU72LCWOTJWPFIIXFSCABWQ7B55Y7G3OGARKMM
+VITE_REWARD_TOKEN_CONTRACT_ID=CAYH4VFCCZTBFQZGDTDUSRNXTUNR33RLQKRVQZTDYSUZBXVATFE4HREQ
 VITE_STELLAR_READ_ACCOUNT=
 VITE_STELLAR_EXPLORER_URL=https://stellar.expert/explorer/testnet
 VITE_POLL_CONTRACT_WASM_URL=/contracts/poll_contract.wasm

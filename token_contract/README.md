@@ -7,6 +7,13 @@ This folder contains a simple Soroban token contract used by LivePoll as a vote 
 The poll contract can mint tokens to voters via an **inter-contract call**, which demonstrates a
 production-relevant pattern for composing contracts.
 
+## Network Details
+
+- Network: `Stellar Testnet`
+- Contract address: `CAYH4VFCCZTBFQZGDTDUSRNXTUNR33RLQKRVQZTDYSUZBXVATFE4HREQ`
+- Contract explorer: https://stellar.expert/explorer/testnet/contract/CAYH4VFCCZTBFQZGDTDUSRNXTUNR33RLQKRVQZTDYSUZBXVATFE4HREQ
+- Initialize tx hash: `8985c77edf3cda881f59e24319b208d985e8efd874fb87c7f7c9ea733dc04824`
+
 ## Build
 
 From the project root:
@@ -35,4 +42,3 @@ The deploy script uploads and deploys:
 - `token_contract`
 
 It then configures the poll contract to mint rewards on vote.
-
